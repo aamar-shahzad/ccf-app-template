@@ -11,6 +11,7 @@
 #include "ccf/ds/logger.h"
 
 #include <fmt/format.h>
+
 namespace app
 {
   // Key-value store types
@@ -33,8 +34,33 @@ namespace app
 
     using Out = void;
   };
+
+  struct GlobalModel
+  {
+    std::string model_name;
+    nlohmann::json model_data;
+  };
+
+  struct ModelWrite
+  {
+    struct In
+    {
+      GlobalModel global_model; // Use the GlobalModel structure in ModelWrite
+    };
+
+    using Out = void;
+  };
+
   DECLARE_JSON_TYPE(Write::In);
   DECLARE_JSON_REQUIRED_FIELDS(Write::In, msg);
+
+  // Declare JSON types for GlobalModel
+  DECLARE_JSON_TYPE(GlobalModel);
+  DECLARE_JSON_REQUIRED_FIELDS(GlobalModel, model_name, model_data);
+
+  // Declare JSON types for ModelWrite
+  DECLARE_JSON_TYPE(ModelWrite::In);
+  DECLARE_JSON_REQUIRED_FIELDS(ModelWrite::In, global_model);
 
   class AppHandlers : public ccf::UserEndpointRegistry
   {
@@ -118,26 +144,94 @@ namespace app
           return ccf::make_success();
         };
 
+      // auto write_model =
+      //   [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
+      //   {
+      //     const auto in = params.get<Write::In>();
+      //     if (in.msg.empty())
+      //     {
+      //       return ccf::make_error(
+      //         HTTP_STATUS_BAD_REQUEST,
+      //         ccf::errors::InvalidInput,
+      //         "Cannot record an empty model message.");
+      //     }
+
+      //     auto models_handle = ctx.tx.template rw<Model>(MODELS);
+      //     size_t model_id = models_handle->size();
+      //     models_handle->put(model_id, nlohmann::json::parse(in.msg));
+
+      //     CCF_APP_INFO("x is currently {}", in.msg);
+      //     nlohmann::json payload = {
+      //       {"model_id", model_id}, {"message", "Model uploaded
+      //       successfully"}};
+      //     auto response = ccf::make_success(std::move(payload));
+      //     return response;
+      //   };
       auto write_model =
         [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params) {
-          const auto in = params.get<Write::In>();
-          if (in.msg.empty())
+
+
+          try
           {
-            return ccf::make_error(
-              HTTP_STATUS_BAD_REQUEST,
-              ccf::errors::InvalidInput,
-              "Cannot record an empty model message.");
+            CCF_APP_INFO("uploading endpoint called");
+            const auto in =
+              params.get<ModelWrite::In>(); // Change the parameter type
+            const GlobalModel& global_model = in.global_model;
+      
+
+            CCF_APP_INFO(
+              "Model Name: {}, Model Data: {}",
+              global_model.model_name,
+              global_model.model_data.dump());
+
+            if (
+              global_model.model_name.empty() ||
+              global_model.model_data.is_null())
+            {
+              return ccf::make_error(
+                HTTP_STATUS_BAD_REQUEST,
+                ccf::errors::InvalidInput,
+                "Invalid or empty model payload.");
+            }
+
+            auto models_handle = ctx.tx.template rw<Model>(MODELS);
+            size_t model_id = models_handle->size();
+
+            // Save the model data in the Model map
+            models_handle->put(model_id, global_model.model_data);
+
+            // Example: Extract and print information from the custom model
+            // structure
+            std::string model_name = global_model.model_name;
+            CCF_APP_INFO("Model ID: {}, Model Name: {}", model_id, model_name);
+
+            nlohmann::json payload = {
+              {"model_id", model_id},
+              {"message", "Model uploaded successfully"},
+              {"model_name", model_name}};
+            auto response = ccf::make_success(std::move(payload));
+            return response;
           }
+          catch (const std::exception& e)
+          {
+            CCF_APP_INFO("Exception in write_model: {}", e.what());
 
-          auto models_handle = ctx.tx.template rw<Model>(MODELS);
-          size_t model_id = models_handle->size();
-          models_handle->put(model_id, nlohmann::json::parse(in.msg));
+            // Handle the exception and return an error response
+            return ccf::make_error(
+              HTTP_STATUS_INTERNAL_SERVER_ERROR,
+              ccf::errors::InternalError,
+              "Internal server error occurred while processing the request.");
+          }
+          catch (...)
+          {
+            CCF_APP_INFO("Unknown exception in write_model");
 
-          CCF_APP_INFO("x is currently {}", in.msg);
-          nlohmann::json payload = {
-            {"model_id", model_id}, {"message", "Model uploaded successfully"}};
-          auto response = ccf::make_success(std::move(payload));
-          return response;
+            // Handle the unknown exception and return an error response
+            return ccf::make_error(
+              HTTP_STATUS_INTERNAL_SERVER_ERROR,
+              ccf::errors::InternalError,
+              "Internal server error occurred while processing the request.");
+          }
         };
 
       auto write_weights =
@@ -154,6 +248,7 @@ namespace app
           auto weights_handle = ctx.tx.template rw<Weights>(WEIGHTS);
           weights_handle->put(weights_handle->size(), in.msg);
           nlohmann::json payload = {{"message", "Weights received"}};
+
           auto response = ccf::make_success(std::move(payload));
           return response;
         };
@@ -291,7 +386,7 @@ namespace app
         HTTP_POST,
         ccf::json_adapter(write_model),
         ccf::no_auth_required)
-        .set_auto_schema<Write::In, void>()
+        .set_auto_schema<ModelWrite::In, void>() // Set auto schema for
         .install();
 
       make_endpoint(
