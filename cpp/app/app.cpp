@@ -295,6 +295,7 @@ auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
         HTTP_GET,
         ccf::json_read_only_adapter(aggregate_weights),
         ccf::no_auth_required)
+            //  {ccf::user_cert_auth_policy})
         .install();
       make_read_only_endpoint(
         "/model",
