@@ -6,7 +6,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Number of times to run the loop
-num_runs=600
+num_runs=200
 
 # Initialize variables for total time, total successful requests, and total failed requests
 total_time=0
