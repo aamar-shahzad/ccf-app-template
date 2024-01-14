@@ -34,9 +34,9 @@ endif()
 
 
 
-option(PUBLIC_LEASES
-       "If enabled, leases are recorded in plaintext in the ledger (insecure!)"
-       OFF)
+# option(PUBLIC_LEASES
+#        "If enabled, leases are recorded in plaintext in the ledger (insecure!)"
+#        OFF)
 
 option(VERBOSE_LOGGING "enable verbose logging" OFF)
 
@@ -49,7 +49,6 @@ add_ccf_app(
   cpp/app/app.cpp
 
   INCLUDE_DIRS
-  "${CMAKE_BINARY_DIR}/proto"
   "${CCF_DIR}/include/ccf/_private"
   INSTALL_LIBS
   ON)
