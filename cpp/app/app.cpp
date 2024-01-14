@@ -215,6 +215,7 @@ namespace app
             ccf::errors::ResourceNotFound,
             fmt::format("Cannot find model for id \"{}\".", model_id));
         }
+        
         return ccf::make_success(model_json);
       };
 
