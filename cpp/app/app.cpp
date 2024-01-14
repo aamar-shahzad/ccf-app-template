@@ -134,7 +134,10 @@ namespace app
           models_handle->put(model_id, nlohmann::json::parse(in.msg));
 
           CCF_APP_INFO("x is currently {}", in.msg);
-          return ccf::make_success(model_id);
+          nlohmann::json payload = {
+            {"model_id", model_id}, {"message", "Model uploaded successfully"}};
+          auto response = ccf::make_success(std::move(payload));
+          return response;
         };
 
       auto write_weights =
@@ -150,7 +153,9 @@ namespace app
 
           auto weights_handle = ctx.tx.template rw<Weights>(WEIGHTS);
           weights_handle->put(weights_handle->size(), in.msg);
-          return ccf::make_success();
+          nlohmann::json payload = {{"message", "Weights received"}};
+          auto response = ccf::make_success(std::move(payload));
+          return response;
         };
 
       // auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
@@ -162,7 +167,8 @@ namespace app
 
       //   models_handle->foreach(
       //     [&](
-      //       const size_t& model_id, const nlohmann::json& model_json) -> bool {
+      //       const size_t& model_id, const nlohmann::json& model_json) -> bool
+      //       {
       //       // Your code to process each model entry
       //       CCF_APP_INFO(
       //         "Model ID: {}, Model JSON: {}", model_id, model_json.dump());
@@ -191,53 +197,54 @@ namespace app
 
       //   return ccf::make_success(total_weight);
       // };
-auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
-  auto start_time = std::chrono::steady_clock::now();
+      auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
+        auto start_time = std::chrono::steady_clock::now();
 
-  auto models_handle = ctx.tx.template ro<Model>(MODELS);
+        auto models_handle = ctx.tx.template ro<Model>(MODELS);
 
-  // Perform aggregations on weights
-  // Example: Summing up all weights
-  double total_weight = 0.0;
+        // Perform aggregations on weights
+        // Example: Summing up all weights
+        double total_weight = 0.0;
 
-  models_handle->foreach(
-    [&](
-      const size_t& model_id, const nlohmann::json& model_json) -> bool {
-      // Your code to process each model entry
-      CCF_APP_INFO(
-        "Model ID: {}, Model JSON: {}", model_id, model_json.dump());
+        models_handle->foreach(
+          [&](
+            const size_t& model_id, const nlohmann::json& model_json) -> bool {
+            // Your code to process each model entry
+            CCF_APP_INFO(
+              "Model ID: {}, Model JSON: {}", model_id, model_json.dump());
 
-      // Extract the 'weights' field from the model_json and accumulate
-      // the values
-      if (model_json.contains("weights"))
-      {
-        const auto& weights = model_json["weights"];
-        if (weights.is_object())
-        {
-          for (auto it = weights.begin(); it != weights.end(); ++it)
-          {
-            if (it.value().is_number())
+            // Extract the 'weights' field from the model_json and accumulate
+            // the values
+            if (model_json.contains("weights"))
             {
-              total_weight +=
-                it.value().get<double>(); // Explicit cast to double
+              const auto& weights = model_json["weights"];
+              if (weights.is_object())
+              {
+                for (auto it = weights.begin(); it != weights.end(); ++it)
+                {
+                  if (it.value().is_number())
+                  {
+                    total_weight +=
+                      it.value().get<double>(); // Explicit cast to double
+                  }
+                }
+              }
             }
-          }
-        }
-      }
 
-      // Return true to continue iteration, false to stop
-      return true;
-    });
+            // Return true to continue iteration, false to stop
+            return true;
+          });
 
-  auto end_time = std::chrono::steady_clock::now();
-  auto elapsed_time =
-    std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time)
-      .count();
+        auto end_time = std::chrono::steady_clock::now();
+        auto elapsed_time =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+            end_time - start_time)
+            .count();
 
-  CCF_APP_INFO("Aggregation Time: {} ms", elapsed_time);
+        CCF_APP_INFO("Aggregation Time: {} ms", elapsed_time);
 
-  return ccf::make_success(total_weight);
-};
+        return ccf::make_success(total_weight);
+      };
 
       auto get_model = [this](auto& ctx, nlohmann::json&& params) {
         const auto parsed_query =
@@ -263,7 +270,12 @@ auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
             fmt::format("Cannot find model for id \"{}\".", model_id));
         }
 
-        return ccf::make_success(model_json);
+        nlohmann::json payload = {
+          {"model_id", model_id},
+          {"message", "Model details retrieved successfully"},
+          {"model_details", std::move(model_json)}};
+        auto response = ccf::make_success(std::move(payload));
+        return response;
       };
 
       make_endpoint(
@@ -295,7 +307,7 @@ auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
         HTTP_GET,
         ccf::json_read_only_adapter(aggregate_weights),
         ccf::no_auth_required)
-            //  {ccf::user_cert_auth_policy})
+        //  {ccf::user_cert_auth_policy})
         .install();
       make_read_only_endpoint(
         "/model",

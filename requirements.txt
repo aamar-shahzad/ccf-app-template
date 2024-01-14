@@ -13,3 +13,6 @@ mypy-protobuf==3.4.0
 grpcio-tools==1.50.0
 paramiko==2.12.0
 types-paramiko==2.12.0
+requests==2.26.0
+torch==1.9.0
+torchvision==0.10.0
