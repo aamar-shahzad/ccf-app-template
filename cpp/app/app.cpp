@@ -389,7 +389,7 @@ namespace app
         .set_auto_schema<ModelWrite::In, void>() // Set auto schema for
         .install();
 
-      make_endpoint(
+      make_endpoint(Q
         "/weights",
         HTTP_POST,
         ccf::json_adapter(write_weights),
