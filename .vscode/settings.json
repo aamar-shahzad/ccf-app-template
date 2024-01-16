@@ -3,6 +3,11 @@
     "files.associations": {
         "thread": "cpp",
         "__locale": "cpp",
-        "locale": "cpp"
+        "locale": "cpp",
+        "memory": "cpp",
+        "future": "cpp",
+        "istream": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp"
     }
 }
