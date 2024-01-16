@@ -1,7 +1,8 @@
 {
-    "name": "Development Container for CCF C++ Apps",
-    "context": "..",
-    "image": "mcr.microsoft.com/ccf/app/dev:4.0.7-virtual",
-    "runArgs": [],
-    "extensions": ["ms-vscode.cpptools"]
-  }
+  "name": "Development Container for CCF C++ Apps",
+  "context": "..",
+  "image": "mcr.microsoft.com/ccf/app/dev:4.0.7-virtual",
+  "dockerFile": "Dockerfile",  // Add this line
+  "runArgs": [],
+  "extensions": ["ms-vscode.cpptools"]
+}
