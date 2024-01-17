@@ -51,17 +51,43 @@ namespace app
 
     return weight_sum;
   }
+  // Assume a struct to represent model weights
+  struct ModelWeights
+  {
+    std::vector<double> weights;
+  };
+
+  // Function to process JSON weights
+  ModelWeights process_weights_json(const nlohmann::json& weights_json)
+  {
+    // Assuming weights are stored as an array in the JSON
+    ModelWeights result;
+    if (weights_json.is_array())
+    {
+      for (const auto& weight : weights_json)
+      {
+        if (weight.is_number())
+        {
+          result.weights.push_back(weight.get<double>());
+        }
+      }
+    }
+    return result;
+  }
 
   // Key-value store types
   using Map = kv::Map<size_t, std::string>;
-  static constexpr auto RECORDS = "records";
+
   using User = kv::Map<size_t, std::string>; // User information
   using Model = kv::Map<size_t, nlohmann::json>;
   using Weights = kv::Map<size_t, nlohmann::json>; // Model weights
+  using GlobalModelWeights = kv::Map<size_t, nlohmann::json>;
 
+  static constexpr auto GLOBAL_MODELS = "global_models";
   static constexpr auto USERS = "users";
   static constexpr auto MODELS = "models";
   static constexpr auto WEIGHTS = "weights";
+  static constexpr auto RECORDS = "records";
 
   // API types
   struct Write
@@ -95,7 +121,7 @@ namespace app
     struct In
     {
       size_t model_id;
-      std::string weights_base64;
+      nlohmann::json weights_json; // Change the type to nlohmann::json
       size_t round_no;
     };
 
@@ -104,7 +130,7 @@ namespace app
 
   DECLARE_JSON_TYPE(ModelWeightWrite::In);
   DECLARE_JSON_REQUIRED_FIELDS(
-    ModelWeightWrite::In, model_id, weights_base64, round_no);
+    ModelWeightWrite::In, model_id, weights_json, round_no);
   DECLARE_JSON_TYPE(Write::In);
   DECLARE_JSON_REQUIRED_FIELDS(Write::In, msg);
 
@@ -291,20 +317,10 @@ namespace app
           try
           {
             CCF_APP_INFO("model weight write endpoint called");
-            const auto in = params.get<ModelWeightWrite::In>();
-
-            // if (
-            //   in.model_id==0 || in.weights_base64.empty() ||
-            //   in.round_no == 0)
-            // {
-            //   return ccf::make_error(
-            //     HTTP_STATUS_BAD_REQUEST,
-            //     ccf::errors::InvalidInput,
-            //     "Invalid or empty model weight payload.");
-            // }
 
             auto weights_handle = ctx.tx.template rw<Weights>(WEIGHTS);
-            weights_handle->put(weights_handle->size(), in.weights_base64);
+            const auto in = params.get<ModelWeightWrite::In>();
+            weights_handle->put(weights_handle->size(), in.weights_json.dump());
 
             // Handle the model weight information as needed
             // CCF_APP_INFO(
@@ -389,6 +405,92 @@ namespace app
 
       //   return ccf::make_success(total_weight);
       // };
+
+      auto aggregate_weights_federated = [this](
+                                           auto& ctx, nlohmann::json&& params) {
+        auto start_time = std::chrono::steady_clock::now();
+        const auto parsed_query =
+          http::parse_query(ctx.rpc_ctx->get_request_query());
+
+        std::string error_reason;
+        size_t model_id = 0;
+        if (!http::get_query_value(
+              parsed_query, "model_id", model_id, error_reason))
+        {
+          return ccf::make_error(
+            HTTP_STATUS_BAD_REQUEST,
+            ccf::errors::InvalidQueryParameterValue,
+            std::move(error_reason));
+        }
+
+        // Retrieve the read-only handle outside of the transaction
+        auto global_models_handle =
+          ctx.tx.template ro<GlobalModelWeights>(GLOBAL_MODELS);
+        auto weights_handle = ctx.tx.template ro<Weights>(WEIGHTS);
+        double learning_rate =
+          0.1; // You can adjust the learning rate as needed
+
+        // The rest of the function remains the same
+        weights_handle->foreach(
+          [&](const size_t& weight_id, const nlohmann::json& weights_json)
+            -> bool {
+            try
+            {
+              // Decode the JSON weights
+              ModelWeights client_weights = process_weights_json(weights_json);
+
+              // Perform Federated Averaging
+              // auto global_model_entry = global_models_handle->get(model_id);
+
+              // Rest of the code remains the same
+            }
+            catch (const std::exception& e)
+            {
+              // Handle decoding or processing errors
+              CCF_APP_INFO("Error processing weights: {}", e.what());
+              return false; // Stop the iteration on error
+            }
+
+            return true;
+          });
+
+        return ccf::make_success("Global model updated successfully");
+      };
+
+      auto get_global_model = [this](auto& ctx, nlohmann::json&& params) {
+        const auto parsed_query =
+          http::parse_query(ctx.rpc_ctx->get_request_query());
+        std::string error_reason;
+        size_t model_id = 0;
+        if (!http::get_query_value(
+              parsed_query, "model_id", model_id, error_reason))
+        {
+          return ccf::make_error(
+            HTTP_STATUS_BAD_REQUEST,
+            ccf::errors::InvalidQueryParameterValue,
+            std::move(error_reason));
+        }
+
+        auto global_models_handle =
+          ctx.tx.template ro<GlobalModelWeights>(GLOBAL_MODELS);
+        auto global_model_entry = global_models_handle->get(model_id);
+
+        if (!global_model_entry.has_value())
+        {
+          return ccf::make_error(
+            HTTP_STATUS_NOT_FOUND,
+            ccf::errors::ResourceNotFound,
+            fmt::format("Cannot find global model for id \"{}\".", model_id));
+        }
+
+        nlohmann::json payload = {
+          {"model_id", model_id},
+          {"message", "Global Model retrieved successfully"},
+          {"global_model", std::move(global_model_entry)}};
+        auto response = ccf::make_success(std::move(payload));
+        return response;
+      };
+
       auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
         auto start_time = std::chrono::steady_clock::now();
 
@@ -426,7 +528,6 @@ namespace app
                 // Decode base64-encoded weights
                 std::vector<unsigned char> binary_weights =
                   base64_decode(base64_weights);
-         
 
                 // Process the weights (you may need to implement a proper
                 // processing logic)
@@ -507,6 +608,14 @@ namespace app
         auto response = ccf::make_success(std::move(payload));
         return response;
       };
+      make_read_only_endpoint(
+        "/global_model_weights",
+        HTTP_GET,
+        ccf::json_read_only_adapter(get_global_model),
+        ccf::no_auth_required)
+        .set_auto_schema<void, nlohmann::json>()
+        .add_query_parameter<size_t>("model_id")
+        .install();
 
       make_endpoint(
         "/user",
@@ -533,7 +642,7 @@ namespace app
       make_read_only_endpoint(
         "/aggregate_weights",
         HTTP_GET,
-        ccf::json_read_only_adapter(aggregate_weights),
+        ccf::json_read_only_adapter(aggregate_weights_federated),
         ccf::no_auth_required)
         //  {ccf::user_cert_auth_policy})
         .add_query_parameter<size_t>("model_id")
