@@ -153,7 +153,6 @@ namespace app
         "This minimal CCF C++ application aims to be "
         "used as a template for CCF developers.";
       openapi_info.document_version = "0.0.1";
-
       auto write = [this](auto& ctx, nlohmann::json&& params) {
         const auto parsed_query =
           http::parse_query(ctx.rpc_ctx->get_request_query());
@@ -229,29 +228,7 @@ namespace app
           return ccf::make_success();
         };
 
-      // auto write_model =
-      //   [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
-      //   {
-      //     const auto in = params.get<Write::In>();
-      //     if (in.msg.empty())
-      //     {
-      //       return ccf::make_error(
-      //         HTTP_STATUS_BAD_REQUEST,
-      //         ccf::errors::InvalidInput,
-      //         "Cannot record an empty model message.");
-      //     }
-
-      //     auto models_handle = ctx.tx.template rw<Model>(MODELS);
-      //     size_t model_id = models_handle->size();
-      //     models_handle->put(model_id, nlohmann::json::parse(in.msg));
-
-      //     CCF_APP_INFO("x is currently {}", in.msg);
-      //     nlohmann::json payload = {
-      //       {"model_id", model_id}, {"message", "Model uploaded
-      //       successfully"}};
-      //     auto response = ccf::make_success(std::move(payload));
-      //     return response;
-      //   };
+  
       auto write_model =
         [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params) {
           try
@@ -319,16 +296,11 @@ namespace app
             CCF_APP_INFO("model weight write endpoint called");
 
             auto weights_handle = ctx.tx.template rw<Weights>(WEIGHTS);
+            
+        auto global_models_handle =
+          ctx.tx.template rw<GlobalModelWeights>(GLOBAL_MODELS);
             const auto in = params.get<ModelWeightWrite::In>();
             weights_handle->put(weights_handle->size(), in.weights_json.dump());
-
-            // Handle the model weight information as needed
-            // CCF_APP_INFO(
-            //   "Model ID: {}, Round No: {}, Weights: {}",
-            //   in.model_id,
-            //   in.round_no,
-            //   in.weights_base64);
-
             nlohmann::json payload = {{"message", "Model weights received"}};
             auto response = ccf::make_success(std::move(payload));
             return response;
@@ -406,8 +378,7 @@ namespace app
       //   return ccf::make_success(total_weight);
       // };
 
-      auto aggregate_weights_federated = [this](
-                                           auto& ctx, nlohmann::json&& params) {
+      auto aggregate_weights_federated = [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params) {
         auto start_time = std::chrono::steady_clock::now();
         const auto parsed_query =
           http::parse_query(ctx.rpc_ctx->get_request_query());
@@ -424,9 +395,10 @@ namespace app
         }
 
         // Retrieve the read-only handle outside of the transaction
-        auto global_models_handle =
-          ctx.tx.template ro<GlobalModelWeights>(GLOBAL_MODELS);
+
         auto weights_handle = ctx.tx.template ro<Weights>(WEIGHTS);
+        auto global_models_handle =
+          ctx.tx.template rw<GlobalModelWeights>(GLOBAL_MODELS);
         double learning_rate =
           0.1; // You can adjust the learning rate as needed
 
@@ -436,13 +408,33 @@ namespace app
             -> bool {
             try
             {
-              // Decode the JSON weights
-              ModelWeights client_weights = process_weights_json(weights_json);
+              ModelWeights client_weights =process_weights_json(weights_json);
 
-              // Perform Federated Averaging
-              // auto global_model_entry = global_models_handle->get(model_id);
+        // Perform Federated Averaging
+        auto global_model_entry = global_models_handle->get(model_id);
+        ModelWeights global_model;
 
-              // Rest of the code remains the same
+        if (global_model_entry.has_value()) {
+          global_model = process_weights_json(global_model_entry.value());
+        }
+
+        if (global_model.weights.empty())
+        {
+          // If global model is empty, initialize it with client weights
+          global_model = client_weights;
+        }
+        else
+        {
+          // Update the global model with federated averaging
+          for (size_t i = 0; i < global_model.weights.size(); ++i)
+          {
+            global_model.weights[i] += learning_rate *
+              (client_weights.weights[i] - global_model.weights[i]);
+          }
+        }
+
+        // Save the updated global model
+        global_models_handle->put(model_id, global_model);
             }
             catch (const std::exception& e)
             {
@@ -639,12 +631,13 @@ namespace app
         ccf::no_auth_required)
         .set_auto_schema<ModelWeightWrite::In, void>()
         .install();
-      make_read_only_endpoint(
+      make_endpoint(
         "/aggregate_weights",
-        HTTP_GET,
-        ccf::json_read_only_adapter(aggregate_weights_federated),
+        HTTP_PUT,
+        ccf::json_adapter(aggregate_weights_federated),
         ccf::no_auth_required)
         //  {ccf::user_cert_auth_policy})
+        // .set_auto_schema<void, double>()
         .add_query_parameter<size_t>("model_id")
         .install();
       make_read_only_endpoint(
