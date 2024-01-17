@@ -57,7 +57,8 @@ namespace app
   static constexpr auto RECORDS = "records";
   using User = kv::Map<size_t, std::string>; // User information
   using Model = kv::Map<size_t, nlohmann::json>;
-  using Weights = kv::Map<size_t, std::string>; // Model weights
+  using Weights = kv::Map<size_t, nlohmann::json>; // Model weights
+
   static constexpr auto USERS = "users";
   static constexpr auto MODELS = "models";
   static constexpr auto WEIGHTS = "weights";
@@ -388,66 +389,92 @@ namespace app
 
       //   return ccf::make_success(total_weight);
       // };
-     auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
-    auto start_time = std::chrono::steady_clock::now();
+      auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
+        auto start_time = std::chrono::steady_clock::now();
 
-    const auto parsed_query =
-        http::parse_query(ctx.rpc_ctx->get_request_query());
+        const auto parsed_query =
+          http::parse_query(ctx.rpc_ctx->get_request_query());
 
-    std::string error_reason;
-    size_t model_id = 0;
-    if (!http::get_query_value(
-            parsed_query, "model_id", model_id, error_reason))
-    {
-        return ccf::make_error(
+        std::string error_reason;
+        size_t model_id = 0;
+        if (!http::get_query_value(
+              parsed_query, "model_id", model_id, error_reason))
+        {
+          return ccf::make_error(
             HTTP_STATUS_BAD_REQUEST,
             ccf::errors::InvalidQueryParameterValue,
             std::move(error_reason));
-    }
+        }
 
-    auto weights_handle = ctx.tx.template ro<Weights>(WEIGHTS);
+        auto weights_handle = ctx.tx.template ro<Weights>(WEIGHTS);
 
-    // Perform aggregations on weights
-    double total_weight_sum = 0.0;
-    size_t total_weights_count = 0;
+        // Perform aggregations on weights
+        double total_weight_sum = 0.0;
+        size_t total_weights_count = 0;
 
-    weights_handle->foreach(
-        [&](const size_t& weight_id, const std::string& base64_weights) -> bool {
-            // Check if the weight record is associated with the specified model_id
-            // (You may need to adjust your data model accordingly)
-            // For example, you might store the model_id in the weight record.
-            // Here, I assume the weight_id itself represents the model_id.
-            if (weight_id == model_id) {
+        weights_handle->foreach(
+          [&](const size_t& weight_id, const std::string& base64_weights)
+            -> bool {
+            try
+            {
+              // Check if the weight record is associated with the specified
+              // model_id (You may need to adjust your data model accordingly)
+              // For example, you might store the model_id in the weight record.
+              // Here, I assume the weight_id itself represents the model_id.
+              if (weight_id == model_id)
+              {
                 // Decode base64-encoded weights
-                std::vector<unsigned char> binary_weights = base64_decode(base64_weights);
+                std::vector<unsigned char> binary_weights =
+                  base64_decode(base64_weights);
+         
 
                 // Process the weights (you may need to implement a proper
                 // processing logic)
                 double weight_sum = process_weights(binary_weights);
+                CCF_APP_INFO("weight_sum :{}", weight_sum);
 
                 // Accumulate the weights
                 total_weight_sum += weight_sum;
                 total_weights_count++;
+              }
+            }
+            catch (const std::exception& e)
+            {
+              // Handle decoding or processing errors
+              CCF_APP_INFO("Error processing weights: {}", e.what());
+              return false; // Stop the iteration on error
             }
 
             return true;
-        });
+          });
 
-    // Calculate the average weight
-    double average_weight = (total_weights_count > 0) ?
-        total_weight_sum / total_weights_count :
-        0.0;
+        // Calculate the average weight
+        double average_weight = (total_weights_count > 0) ?
+          total_weight_sum / total_weights_count :
+          0.0;
+        auto model_data = weights_handle->get(model_id);
+        if (!model_data.has_value())
+        {
+          return ccf::make_error(
+            HTTP_STATUS_NOT_FOUND,
+            ccf::errors::ResourceNotFound,
+            fmt::format("Cannot find model for id \"{}\".", model_id));
+        }
 
-    auto end_time = std::chrono::steady_clock::now();
-    auto elapsed_time =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
+        auto models_handle = ctx.tx.template ro<Model>(MODELS);
+        auto model_json = models_handle->get(model_id);
+        // CCF_APP_INFO("model json {}", model_json.value);
+
+        auto end_time = std::chrono::steady_clock::now();
+        auto elapsed_time =
+          std::chrono::duration_cast<std::chrono::milliseconds>(
             end_time - start_time)
             .count();
 
-    CCF_APP_INFO("Aggregation Time: {} ms", elapsed_time);
+        CCF_APP_INFO("Aggregation Time: {} ms", elapsed_time);
 
-    return ccf::make_success(average_weight);
-};
+        return ccf::make_success(average_weight);
+      };
 
       auto get_model = [this](auto& ctx, nlohmann::json&& params) {
         const auto parsed_query =
