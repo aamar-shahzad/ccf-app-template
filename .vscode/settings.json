@@ -85,6 +85,9 @@
         "ios": "cpp",
         "queue": "cpp",
         "stack": "cpp",
-        "__nullptr": "cpp"
+        "__nullptr": "cpp",
+        "cfenv": "cpp",
+        "typeindex": "cpp",
+        "filesystem": "cpp"
     }
 }
