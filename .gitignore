@@ -2,3 +2,5 @@
 *.deb
 **/.venv/
 **/workspace/
+**/venv/
+.gitmodules
