@@ -393,7 +393,6 @@ ModelWeights federated_averaging(
                 "Invalid or empty weights payload.");
             }
             auto serilzed_weights = in.weights_json.dump();
-            auto deselize_weights = nlohmann::json::parse(serilzed_weights);
             weights_handle->put(weights_handle->size(), serilzed_weights);
             nlohmann::json payload = {{"message", "Model weights received"}};
             auto response = ccf::make_success(std::move(payload));
@@ -421,57 +420,7 @@ ModelWeights federated_averaging(
           }
         };
 
-      // auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
-      //   auto start_time = std::chrono::steady_clock::now();
-
-      //   auto models_handle = ctx.tx.template ro<Model>(MODELS);
-      //   auto weights_handle = ctx.tx.template ro<Weights>(WEIGHTS);
-
-      //   // Perform aggregations on weights
-      //   // Example: Summing up all weights
-      //   double total_weight = 0.0;
-
-      //   models_handle->foreach(
-      //     [&](
-      //       const size_t& model_id, const nlohmann::json& model_json) -> bool
-      //       {
-      //       // Your code to process each model entry
-      //       CCF_APP_TRACE(
-      //         "Model ID: {}, Model JSON: {}", model_id, model_json.dump());
-
-      //       // Extract the 'weights' field from the model_json and accumulate
-      //       // the values
-      //       if (model_json.contains("weights"))
-      //       {
-      //         const auto& weights = model_json["weights"];
-      //         if (weights.is_object())
-      //         {
-      //           for (auto it = weights.begin(); it != weights.end(); ++it)
-      //           {
-      //             if (it.value().is_number())
-      //             {
-      //               total_weight +=
-      //                 it.value().get<double>(); // Explicit cast to double
-      //             }
-      //           }
-      //         }
-      //       }
-
-      //       // Return true to continue iteration, false to stop
-      //       return true;
-      //     });
-
-      //   auto end_time = std::chrono::steady_clock::now();
-      //   auto elapsed_time =
-      //     std::chrono::duration_cast<std::chrono::milliseconds>(
-      //       end_time - start_time)
-      //       .count();
-
-      //   CCF_APP_INFO("Aggregation Time: {} ms", elapsed_time);
-
-      //   return ccf::make_success(total_weight);
-      // };
-
+    
       auto aggregate_weights_federated =
         [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params) {
           auto start_time = std::chrono::steady_clock::now();
@@ -504,24 +453,12 @@ ModelWeights federated_averaging(
               -> bool {
               try
               {
-              
-                if (weights_json.is_string())
-                {
-                  CCF_APP_INFO("weights_json is string");
                   auto deserialized_weights =
                     nlohmann::json::parse(weights_json.get<std::string>());
                   local_weights.push_back(deserialized_weights);
-                }
-                else if (weights_json.is_array())
-                {
-                  CCF_APP_INFO("weights_json is array");
-                  local_weights.push_back(weights_json);
-                }
-                else
-                {
-                  CCF_APP_INFO("Invalid weights_json format");
-                  return false; // Stop the iteration on error
-                }
+                
+            
+              
 
                 size_t random_sample_count =
                   rand() % 1000 + 1; // Adjust as needed
@@ -538,10 +475,8 @@ ModelWeights federated_averaging(
             });
           try
           {
-            auto global_weights =
-              federated_averaging(local_weights, sample_counts);
-
-            // global_models_handle->put(model_id, global_weights.weights.dump());
+            
+      
 
             return ccf::make_success("Global model updated successfully");
           }
@@ -587,7 +522,8 @@ ModelWeights federated_averaging(
         CCF_APP_INFO(
           "weights_handle->size(): {}", global_models_handle->size());
         auto global_model_entry = global_models_handle->get(model_id);
-        CCF_APP_INFO("global_model_entry: {}", global_model_entry.value());
+
+
 
         if (!global_model_entry.has_value())
         {
@@ -596,13 +532,16 @@ ModelWeights federated_averaging(
             ccf::errors::ResourceNotFound,
             fmt::format("Cannot find global model for id \"{}\".", model_id));
         }
+     
+
 
         nlohmann::json payload = {
           {"model_id", model_id},
-          {"message", "Global Model retrieved successfully"},
-          {"global_model", std::move(global_model_entry)}};
+          {"message", "Global model retrieved successfully"},
+          {"global_model", std::move(global_model_entry.value())}};
         auto response = ccf::make_success(std::move(payload));
         return response;
+
       };
 
       auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
@@ -723,7 +662,7 @@ ModelWeights federated_averaging(
         return response;
       };
       make_read_only_endpoint(
-        "/global_model_weights",
+        "/model/download_gloabl_weights",
         HTTP_GET,
         ccf::json_read_only_adapter(get_global_model),
         ccf::no_auth_required)
@@ -732,7 +671,7 @@ ModelWeights federated_averaging(
         .install();
 
       make_endpoint(
-        "/user",
+        "/user/add",
         HTTP_POST,
         ccf::json_adapter(write_user),
         ccf::no_auth_required)
@@ -740,21 +679,21 @@ ModelWeights federated_averaging(
         .install();
 
       make_endpoint(
-        "/model",
+        "/model/intial_model",
         HTTP_POST,
         ccf::json_adapter(write_model),
         ccf::no_auth_required)
         .set_auto_schema<ModelWrite::In, void>() // Set auto schema for
         .install();
       make_endpoint(
-        "/weights",
+        "/model/upload/local_model_weights",
         HTTP_POST,
         ccf::json_adapter(write_weights),
         ccf::no_auth_required)
         .set_auto_schema<ModelWeightWrite::In, void>()
         .install();
       make_endpoint(
-        "/aggregate_weights",
+        "/model/aggregate_weights_local",
         HTTP_PUT,
         ccf::json_adapter(aggregate_weights_federated),
         ccf::no_auth_required)
@@ -763,29 +702,15 @@ ModelWeights federated_averaging(
         .add_query_parameter<size_t>("model_id")
         .install();
       make_read_only_endpoint(
-        "/model",
+        "/model/download/global",
         HTTP_GET,
         ccf::json_read_only_adapter(get_model),
         ccf::no_auth_required)
         .set_auto_schema<void, nlohmann::json>()
         .add_query_parameter<size_t>("model_id")
         .install();
-
-      make_read_only_endpoint(
-        "/log",
-        HTTP_GET,
-        ccf::json_read_only_adapter(read),
-        ccf::no_auth_required)
-        .set_auto_schema<void, void>()
-        .add_query_parameter<size_t>("id")
-        .install();
-      make_endpoint(
-        "/log", HTTP_POST, ccf::json_adapter(write), ccf::no_auth_required)
-        .set_auto_schema<Write::In, void>()
-        .add_query_parameter<size_t>("id")
-        .install();
-    }
-  };
+        
+    }  };
 } // namespace app
 
 namespace ccfapp
