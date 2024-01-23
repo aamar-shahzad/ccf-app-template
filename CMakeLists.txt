@@ -5,6 +5,8 @@ cmake_minimum_required(VERSION 3.16)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
 
+
+
 project(
   lskv
   LANGUAGES C CXX
@@ -32,6 +34,8 @@ if(NOT TARGET ${CCF})
   find_package(${CCF} REQUIRED)
 endif()
 
+include_directories(3rdparty/NumCpp/include)
+
 
 
 # option(PUBLIC_LEASES
@@ -41,6 +45,7 @@ endif()
 option(VERBOSE_LOGGING "enable verbose logging" OFF)
 
 add_compile_definitions(LSKV_VERSION="${LSKV_VERSION}")
+
 
 
 add_ccf_app(
@@ -60,6 +65,8 @@ else()
   message(STATUS "Using terse logging")
 endif()
 
+
+
 # Generate an ephemeral signing key
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem
@@ -70,3 +77,5 @@ add_custom_target(app_signing_key ALL
 
 sign_app_library(lskv.enclave ${CMAKE_CURRENT_SOURCE_DIR}/oe_sign.conf
                  ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem INSTALL_LIBS ON)
+
+

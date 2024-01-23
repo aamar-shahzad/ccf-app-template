@@ -12,15 +12,17 @@
 #include "crypto/entropy.h"
 #include "crypto/key_pair.h"
 #include "crypto/rsa_key_pair.h"
-
+#include "NumCpp.hpp"
 #include <cstring>
 #include <fmt/format.h>
 #include <iostream>
+
 #include <numeric>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include <string>
 #include <vector>
+
 namespace app
 {
 
