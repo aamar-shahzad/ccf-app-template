@@ -19,10 +19,12 @@
 #include <numeric>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
+#include <string>
 #include <vector>
 namespace app
 {
 
+  using json = nlohmann::json;
   std::vector<unsigned char> base64_decode(const std::string& input)
   {
     BIO *bio, *b64;
@@ -120,55 +122,76 @@ namespace app
     }
   }
 
-  ModelWeights federated_averaging(
-    const std::vector<nlohmann::json>& local_weights,
+  std::string federated_average(
+    const std::vector<std::string>& serialized_weights_list,
     const std::vector<size_t>& sample_counts)
   {
-    // Check if local_weights and sample_counts have the same size
-    if (local_weights.size() != sample_counts.size())
+    try
     {
-      // Handle error: Local weights and sample counts should have the same size
-      throw std::runtime_error(
-        "Mismatched sizes of local weights and sample counts.");
-    }
+      size_t num_models = serialized_weights_list.size();
 
-    // Check if local_weights is not empty
-    if (local_weights.empty())
-    {
-      // Handle error: No local weights provided
-      throw std::runtime_error("No local weights provided.");
-    }
-
-    // Check if all local_weights have the same size
-    size_t expected_weights_size = local_weights[0].size();
-    for (size_t i = 1; i < local_weights.size(); ++i)
-    {
-      if (local_weights[i].size() != expected_weights_size)
+      // Deserialize the weights
+      std::vector<json> deserialized_weights_list;
+      for (const auto& serialized_weights : serialized_weights_list)
       {
-        // Handle error: Inconsistent sizes of local weights
-        throw std::runtime_error("Inconsistent sizes of local weights.");
+        deserialized_weights_list.push_back(json::parse(serialized_weights));
       }
+
+      // Calculate the total number of samples
+      size_t total_samples = 0;
+      for (size_t count : sample_counts)
+      {
+        total_samples += count;
+      }
+
+      // Calculate the weights for each model based on the number of samples
+      std::vector<double> weights;
+      for (size_t count : sample_counts)
+      {
+        weights.push_back(static_cast<double>(count) / total_samples);
+      }
+
+      // Initialize an empty vector to store the averaged weights
+      std::vector<json> averaged_weights;
+
+      // Perform federated averaging
+      // Perform federated averaging
+      for (size_t i = 0; i < deserialized_weights_list[0].size(); ++i)
+      {
+        // Iterate over each layer's weights
+        json layer_weights;
+        for (size_t j = 0; j < num_models; ++j)
+        {
+          // Access the innermost array elements in a nested loop
+          const json& current_json = deserialized_weights_list[j];
+          for (size_t k = 0; k < current_json[i].size(); ++k)
+          {
+            // Explicitly convert JSON value to double before multiplication
+            double json_value = current_json[i][k].get<double>();
+            CCF_APP_INFO("json_value {}", json_value);
+            layer_weights.push_back(weights[j] * json_value);
+          }
+        }
+        averaged_weights.push_back(layer_weights.get<std::vector<double>>());
+      }
+
+      // Serialize the averaged weights
+      std::string serialized_averaged_weights = json(averaged_weights).dump();
+
+      return serialized_averaged_weights;
     }
-
-    // Initialize the global model with zeros only if it's not already
-    // initialized
-
-    size_t total_samples = 0;
-    for (size_t i = 0; i < local_weights.size(); ++i)
+    catch (const std::exception& e)
     {
-      total_samples += sample_counts[i];
+      // Handle exceptions and return an error message
+      CCF_APP_INFO("Exception in federated_average: {}", e.what());
+      return "Error: Exception occurred during federated averaging";
     }
-    ModelWeights global_model;
-    global_model.weights = nlohmann::json::object();
-    CCF_APP_INFO("total_samples is {}", local_weights[0].size());
-    for (size_t i = 0; i < local_weights.size(); ++i)
+    catch (...)
     {
-      const double weight_factor =
-        static_cast<double>(sample_counts[i]) / total_samples;
-      add_weighted_local_weights(local_weights[i], weight_factor, global_model);
+      // Handle unknown exceptions and return an error message
+      CCF_APP_INFO("Unknown exception in federated_average");
+      return "Error: Unknown exception occurred during federated averaging";
     }
-
-    return global_model;
   }
 
   // Key-value store types
@@ -470,20 +493,35 @@ namespace app
               -> bool {
               try
               {
-                auto deserialized_weights =
-                  nlohmann::json::parse(weights_json.get<std::string>());
-
-                // Check if the weight belongs to the specified model_id and
-                // round_no
-                if (
-                  deserialized_weights["model_id"] == model_id &&
-                  deserialized_weights["round_no"] == round_no)
+                size_t modelId = weights_json["model_id"];
+                std::string model_weight = weights_json["model_weight"];
+                size_t roundNumber = weights_json["round_no"];
+                if (model_id == modelId && roundNumber == round_no)
                 {
-                local_weights.push_back(deserialized_weights["model_weight"]);
-                  size_t random_sample_count =
-                    rand() % 1000 + 1; // Adjust as needed
-                  sample_counts.push_back(random_sample_count);
+                  {
+                    local_weights.push_back(model_weight);
+                    size_t random_sample_count =
+                      rand() % 1000 + 1; // Adjust as needed
+                    sample_counts.push_back(random_sample_count);
+                  }
                 }
+                // // Check if the weight belongs to the specified model_id and
+                // // round_no
+                // CCF_APP_INFO(
+                //   "deserialized_weights[\"model_id\"] {}",
+                //   deserialized_weights["model_id"]);
+
+                // if (
+                //   deserialized_weights["model_id"] == model_id &&
+                //   deserialized_weights["round_no"] == round_no)
+                // {
+
+                // //
+                // local_weights.push_back(deserialized_weights["model_weight"]);
+                //   size_t random_sample_count =
+                //     rand() % 1000 + 1; // Adjust as needed
+                //   sample_counts.push_back(random_sample_count);
+                // }
               }
               catch (const std::exception& e)
               {
@@ -496,8 +534,22 @@ namespace app
             });
           try
           {
-            // Perform federated averaging
-            CCF_APP_INFO("local_weights size {}", local_weights.size());
+            // Serialize local_weights to strings
+            std::vector<std::string> serialized_local_weights;
+            for (const auto& weight : local_weights)
+            {
+              serialized_local_weights.push_back(weight.dump());
+            }
+
+            // Call federated_average with the serialized weights
+            CCF_APP_INFO(
+              "serialized_local_weights.size() {}",
+              serialized_local_weights.size());
+            auto serialized_averaged_weights =
+              federated_average(serialized_local_weights, sample_counts);
+
+            // print the serialized_averaged_weights
+
             return ccf::make_success("Global model updated successfully");
           }
           catch (const std::exception& e)
@@ -589,8 +641,9 @@ namespace app
             {
               // Check if the weight record is associated with the specified
               // model_id (You may need to adjust your data model accordingly)
-              // For example, you might store the model_id in the weight record.
-              // Here, I assume the weight_id itself represents the model_id.
+              // For example, you might store the model_id in the weight
+              // record. Here, I assume the weight_id itself represents the
+              // model_id.
               if (weight_id == model_id)
               {
                 // Decode base64-encoded weights
