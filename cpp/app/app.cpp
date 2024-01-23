@@ -77,92 +77,99 @@ namespace app
     return result;
   }
 
- void add_weighted_local_weights(
+  void add_weighted_local_weights(
     const nlohmann::json& weights,
     double weight_factor,
     ModelWeights& global_model)
-{
-
+  {
     if (weights.is_object())
     {
-        for (const auto& entry : weights.items())
+      for (const auto& entry : weights.items())
+      {
+        CCF_APP_INFO("weight is object");
+        if (!entry.key().empty())
         {
-          CCF_APP_INFO("weight is object");
-            if (!entry.key().empty())
-            {
-                size_t j = std::stoul(entry.key());
-                const double local_weight_value = entry.value().get<double>();
-                // If the key doesn't exist in the global model, initialize it to 0
-                if (global_model.weights.find(std::to_string(j)) == global_model.weights.end())
-                {
-                    global_model.weights[std::to_string(j)] = 0.0;
-                    CCF_APP_INFO("global_model.weights[std::to_string(j)] is {}", global_model.weights[std::to_string(j)]);
-                }
-                global_model.weights[std::to_string(j)] += weight_factor * local_weight_value;
-            }
-            else
-            {
-                CCF_APP_INFO("Empty key in JSON object.");
-            }
+          size_t j = std::stoul(entry.key());
+          const double local_weight_value = entry.value().get<double>();
+          // If the key doesn't exist in the global model, initialize it to 0
+          if (
+            global_model.weights.find(std::to_string(j)) ==
+            global_model.weights.end())
+          {
+            global_model.weights[std::to_string(j)] = 0.0;
+            CCF_APP_INFO(
+              "global_model.weights[std::to_string(j)] is {}",
+              global_model.weights[std::to_string(j)]);
+          }
+          global_model.weights[std::to_string(j)] +=
+            weight_factor * local_weight_value;
         }
+        else
+        {
+          CCF_APP_INFO("Empty key in JSON object.");
+        }
+      }
     }
     else if (weights.is_array())
     {
-        CCF_APP_INFO("weight is array");
-        for (const auto& nested_weights : weights)
-        {
-            add_weighted_local_weights(nested_weights, weight_factor, global_model);
-        }
+      CCF_APP_INFO("weight is array");
+      for (const auto& nested_weights : weights)
+      {
+        add_weighted_local_weights(nested_weights, weight_factor, global_model);
+      }
     }
-}
+  }
 
-ModelWeights federated_averaging(
+  ModelWeights federated_averaging(
     const std::vector<nlohmann::json>& local_weights,
     const std::vector<size_t>& sample_counts)
-{
+  {
     // Check if local_weights and sample_counts have the same size
     if (local_weights.size() != sample_counts.size())
     {
-        // Handle error: Local weights and sample counts should have the same size
-        throw std::runtime_error("Mismatched sizes of local weights and sample counts.");
+      // Handle error: Local weights and sample counts should have the same size
+      throw std::runtime_error(
+        "Mismatched sizes of local weights and sample counts.");
     }
 
     // Check if local_weights is not empty
     if (local_weights.empty())
     {
-        // Handle error: No local weights provided
-        throw std::runtime_error("No local weights provided.");
+      // Handle error: No local weights provided
+      throw std::runtime_error("No local weights provided.");
     }
 
     // Check if all local_weights have the same size
     size_t expected_weights_size = local_weights[0].size();
     for (size_t i = 1; i < local_weights.size(); ++i)
     {
-        if (local_weights[i].size() != expected_weights_size)
-        {
-            // Handle error: Inconsistent sizes of local weights
-            throw std::runtime_error("Inconsistent sizes of local weights.");
-        }
+      if (local_weights[i].size() != expected_weights_size)
+      {
+        // Handle error: Inconsistent sizes of local weights
+        throw std::runtime_error("Inconsistent sizes of local weights.");
+      }
     }
 
-    // Initialize the global model with zeros only if it's not already initialized
+    // Initialize the global model with zeros only if it's not already
+    // initialized
 
     size_t total_samples = 0;
     for (size_t i = 0; i < local_weights.size(); ++i)
     {
-        total_samples += sample_counts[i];
+      total_samples += sample_counts[i];
     }
     ModelWeights global_model;
     global_model.weights = nlohmann::json::object();
     CCF_APP_INFO("total_samples is {}", local_weights[0].size());
     for (size_t i = 0; i < local_weights.size(); ++i)
     {
-        const double weight_factor = static_cast<double>(sample_counts[i]) / total_samples;
-        add_weighted_local_weights(local_weights[i], weight_factor, global_model);
+      const double weight_factor =
+        static_cast<double>(sample_counts[i]) / total_samples;
+      add_weighted_local_weights(local_weights[i], weight_factor, global_model);
     }
 
     return global_model;
-}
+  }
 
   // Key-value store types
   using Map = kv::Map<size_t, std::string>;
@@ -392,8 +399,16 @@ ModelWeights federated_averaging(
                 ccf::errors::InvalidInput,
                 "Invalid or empty weights payload.");
             }
-            auto serilzed_weights = in.weights_json.dump();
-            weights_handle->put(weights_handle->size(), serilzed_weights);
+            size_t round_no = in.round_no;
+            auto model_weight = in.weights_json;
+            size_t model_id = in.model_id;
+            nlohmann::json serializedObject = {
+              {"round_no", round_no},
+              {"model_weight", model_weight},
+              {"model_id", model_id}};
+            auto serializedString = serializedObject.dump();
+            // auto serilzed_weights = in.weights_json.dump();
+            weights_handle->put(weights_handle->size(), serializedObject);
             nlohmann::json payload = {{"message", "Model weights received"}};
             auto response = ccf::make_success(std::move(payload));
             return response;
@@ -420,7 +435,6 @@ ModelWeights federated_averaging(
           }
         };
 
-    
       auto aggregate_weights_federated =
         [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params) {
           auto start_time = std::chrono::steady_clock::now();
@@ -429,15 +443,18 @@ ModelWeights federated_averaging(
 
           std::string error_reason;
           size_t model_id = 0;
-          if (!http::get_query_value(
-                parsed_query, "model_id", model_id, error_reason))
+          size_t round_no = 0;
+          if (
+            !http::get_query_value(
+              parsed_query, "model_id", model_id, error_reason) ||
+            !http::get_query_value(
+              parsed_query, "round_no", round_no, error_reason))
           {
             return ccf::make_error(
               HTTP_STATUS_BAD_REQUEST,
               ccf::errors::InvalidQueryParameterValue,
               std::move(error_reason));
           }
-
           // Retrieve the read-only handle outside of the transaction
 
           auto weights_handle = ctx.tx.template ro<Weights>(WEIGHTS);
@@ -453,16 +470,20 @@ ModelWeights federated_averaging(
               -> bool {
               try
               {
-                  auto deserialized_weights =
-                    nlohmann::json::parse(weights_json.get<std::string>());
-                  local_weights.push_back(deserialized_weights);
-                
-            
-              
+                auto deserialized_weights =
+                  nlohmann::json::parse(weights_json.get<std::string>());
 
-                size_t random_sample_count =
-                  rand() % 1000 + 1; // Adjust as needed
-                sample_counts.push_back(random_sample_count);
+                // Check if the weight belongs to the specified model_id and
+                // round_no
+                if (
+                  deserialized_weights["model_id"] == model_id &&
+                  deserialized_weights["round_no"] == round_no)
+                {
+                local_weights.push_back(deserialized_weights["model_weight"]);
+                  size_t random_sample_count =
+                    rand() % 1000 + 1; // Adjust as needed
+                  sample_counts.push_back(random_sample_count);
+                }
               }
               catch (const std::exception& e)
               {
@@ -475,9 +496,8 @@ ModelWeights federated_averaging(
             });
           try
           {
-            
-      
-
+            // Perform federated averaging
+            CCF_APP_INFO("local_weights size {}", local_weights.size());
             return ccf::make_success("Global model updated successfully");
           }
           catch (const std::exception& e)
@@ -523,8 +543,6 @@ ModelWeights federated_averaging(
           "weights_handle->size(): {}", global_models_handle->size());
         auto global_model_entry = global_models_handle->get(model_id);
 
-
-
         if (!global_model_entry.has_value())
         {
           return ccf::make_error(
@@ -532,8 +550,6 @@ ModelWeights federated_averaging(
             ccf::errors::ResourceNotFound,
             fmt::format("Cannot find global model for id \"{}\".", model_id));
         }
-     
-
 
         nlohmann::json payload = {
           {"model_id", model_id},
@@ -541,7 +557,6 @@ ModelWeights federated_averaging(
           {"global_model", std::move(global_model_entry.value())}};
         auto response = ccf::make_success(std::move(payload));
         return response;
-
       };
 
       auto aggregate_weights = [this](auto& ctx, nlohmann::json&& params) {
@@ -709,8 +724,8 @@ ModelWeights federated_averaging(
         .set_auto_schema<void, nlohmann::json>()
         .add_query_parameter<size_t>("model_id")
         .install();
-        
-    }  };
+    }
+  };
 } // namespace app
 
 namespace ccfapp
