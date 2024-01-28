@@ -14,7 +14,7 @@ OE_CXX!=which clang++-11
 
 CPP_FILES=$(wildcard cpp/**/*.cpp)
 H_FILES=$(wildcard cpp/**/*.h)
-
+H_FILES=$(wildcard cpp/**/*.hpp)
 BIN_DIR=bin
 
 CCF_VER=ccf-4.0.7
@@ -45,6 +45,11 @@ build-virtual: .venv
 	mkdir -p $(BUILD)
 	cd $(BUILD) && CC=$(CC) CXX=$(CXX) cmake -DCOMPILE_TARGET=virtual -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DVERBOSE_LOGGING=OFF -DCCF_UNSAFE=OFF -DGENERATE_PYTHON=ON -GNinja ..
 	. .venv/bin/activate && cd $(BUILD) && ninja
+.PHONY: build-numcpp
+build-numcpp:
+	mkdir -p $(BUILD)
+	cd $(BUILD) && CC=$(CC) CXX=$(CXX) cmake -DCOMPILE_TARGET=numcpp -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DVERBOSE_LOGGING=OFF -DCCF_UNSAFE=OFF -DGENERATE_PYTHON=ON -GNinja ..
+	cd $(BUILD) && ninja
 
 .PHONY: build-virtual-verbose
 build-virtual-verbose:
@@ -84,7 +89,10 @@ debug-dockerignore:
 
 .PHONY: run-virtual
 run-virtual: build-virtual
+	
 	VENV_DIR=.venv $(CCF_PREFIX_VIRTUAL)/bin/sandbox.sh -p $(BUILD)/liblskv.virtual.so -e virtual -t virtual  --initial-member-count 3 --initial-user-count 2   --max-http-body-size 104857600 
+	
+
 
 .PHONY: run-virtual-verbose
 run-virtual-verbose: build-virtual-verbose

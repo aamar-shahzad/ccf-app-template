@@ -12,21 +12,63 @@
 #include "crypto/entropy.h"
 #include "crypto/key_pair.h"
 #include "crypto/rsa_key_pair.h"
-#include "NumCpp.hpp"
+
+#include <NumCpp/Core.hpp>
+#include <NumCpp/Functions.hpp>
+#include <NumCpp/NdArray.hpp>
+#include <NumCpp/Utils.hpp>
 #include <cstring>
 #include <fmt/format.h>
 #include <iostream>
-
 #include <numeric>
 #include <openssl/bio.h>
 #include <openssl/evp.h>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace app
 {
 
   using json = nlohmann::json;
+
+  nc::NdArray<double> processJson(const nlohmann::json& jsonValue)
+  {
+    nc::NdArray<double> source;
+
+    if (jsonValue.is_array())
+    {
+      // If the value is an array, process each element
+      for (const auto& element : jsonValue)
+      {
+        // Recursively call processJson() on each element
+        auto newValues = processJson(element);
+        source = nc::append(source, newValues, nc::Axis::NONE);
+      }
+    }
+    else if (jsonValue.is_object())
+    {
+      // If the value is an object, process each value
+      for (const auto& element : jsonValue.items())
+      {
+        // Recursively call processJson() on each value
+        auto newValues = processJson(element.value());
+        source = nc::append(source, newValues, nc::Axis::NONE);
+      }
+    }
+    else
+    {
+      // If the value is neither an array nor an object, process it
+      double value = jsonValue;
+      nc::NdArray<double> newValues = {value};
+      source = nc::append(source, newValues, nc::Axis::NONE);
+    }
+
+    // Convert the vector of values to a NumCpp array
+    // nc::NdArray<double> numcppArray(values);
+    return source;
+  }
   std::vector<unsigned char> base64_decode(const std::string& input)
   {
     BIO *bio, *b64;
@@ -487,9 +529,7 @@ namespace app
             ctx.tx.template rw<GlobalModelWeights>(GLOBAL_MODELS);
           double learning_rate =
             0.1; // You can adjust the learning rate as needed
-          std::vector<nlohmann::json> local_weights;
-          std::vector<size_t> sample_counts;
-          // The rest of the function remains the same
+          nc::NdArray<double> deserialized_weights;
           weights_handle->foreach(
             [&](const size_t& weight_id, const nlohmann::json& weights_json)
               -> bool {
@@ -500,30 +540,51 @@ namespace app
                 size_t roundNumber = weights_json["round_no"];
                 if (model_id == modelId && roundNumber == round_no)
                 {
+                  nlohmann::json json_weights =
+                    nlohmann::json::parse(model_weight);
+                  //               std::string weightsString = R"(
+                  //     [
+                  //         [[-0.19662362337112427, -0.003338967217132449,
+                  //         ...]],
+                  //         [[-0.10646957159042358, -0.019710950553417206,
+                  //         ...]],
+                  //         // Add more layers as needed
+                  //     ]
+                  // )";
+
+                  // Parse the string into a JSON object
+
+                  // Initialize a sum for federated averaging
+                  std::vector<std::vector<double>> sum(
+                    json_weights[0].size(),
+                    std::vector<double>(json_weights[0][0].size(), 0.0));
+
+                  // Access the values
+                  for (const auto& weights_layer : json_weights)
                   {
-                    local_weights.push_back(model_weight);
-                    size_t random_sample_count =
-                      rand() % 1000 + 1; // Adjust as needed
-                    sample_counts.push_back(random_sample_count);
+                    for (size_t i = 0; i < weights_layer.size(); ++i)
+                    {
+                      for (size_t j = 0; j < weights_layer[i].size(); ++j)
+                      {
+                        double value = weights_layer[i][j];
+                        // Perform operations as needed (e.g., apply federated
+                        // averaging) For this example, we'll simply accumulate
+                        // the weights
+                        sum[i][j] += value;
+                      }
+                    }
+                  }
+
+                  // Calculate the average
+                  size_t numClients = json_weights.size();
+                  for (size_t i = 0; i < sum.size(); ++i)
+                  {
+                    for (size_t j = 0; j < sum[i].size(); ++j)
+                    {
+                      sum[i][j] /= numClients;
+                    }
                   }
                 }
-                // // Check if the weight belongs to the specified model_id and
-                // // round_no
-                // CCF_APP_INFO(
-                //   "deserialized_weights[\"model_id\"] {}",
-                //   deserialized_weights["model_id"]);
-
-                // if (
-                //   deserialized_weights["model_id"] == model_id &&
-                //   deserialized_weights["round_no"] == round_no)
-                // {
-
-                // //
-                // local_weights.push_back(deserialized_weights["model_weight"]);
-                //   size_t random_sample_count =
-                //     rand() % 1000 + 1; // Adjust as needed
-                //   sample_counts.push_back(random_sample_count);
-                // }
               }
               catch (const std::exception& e)
               {
@@ -536,23 +597,14 @@ namespace app
             });
           try
           {
-            // Serialize local_weights to strings
-            std::vector<std::string> serialized_local_weights;
-            for (const auto& weight : local_weights)
-            {
-              serialized_local_weights.push_back(weight.dump());
-            }
+            nlohmann::json payload = {
+              {"model_id", model_id},
+              {"message", "Global model retrieved successfully"},
+              {"global_model", std::move(deserialized_weights)}};
+            auto response = ccf::make_success(std::move(payload));
+            return response;
 
-            // Call federated_average with the serialized weights
-            CCF_APP_INFO(
-              "serialized_local_weights.size() {}",
-              serialized_local_weights.size());
-            auto serialized_averaged_weights =
-              federated_average(serialized_local_weights, sample_counts);
-
-            // print the serialized_averaged_weights
-
-            return ccf::make_success("Global model updated successfully");
+            // return ccf::make_success("Global model updated successfully");
           }
           catch (const std::exception& e)
           {
