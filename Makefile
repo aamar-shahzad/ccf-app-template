@@ -90,7 +90,7 @@ debug-dockerignore:
 .PHONY: run-virtual
 run-virtual: build-virtual
 	
-	VENV_DIR=.venv $(CCF_PREFIX_VIRTUAL)/bin/sandbox.sh -p $(BUILD)/liblskv.virtual.so -e virtual -t virtual  --initial-member-count 3 --initial-user-count 2   --max-http-body-size 104857600 
+	VENV_DIR=.venv $(CCF_PREFIX_VIRTUAL)/bin/sandbox.sh -p $(BUILD)/liblskv.virtual.so -e virtual -t virtual  --initial-member-count 3 --initial-user-count 4   --max-http-body-size 104857600 
 	
 
 

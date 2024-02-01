@@ -27,11 +27,50 @@
 #include <string>
 #include <string_view>
 #include <vector>
-
 namespace app
 {
 
   using json = nlohmann::json;
+
+  std::vector<float> federatedAveraging(
+    const std::vector<std::vector<float>>& flattenedUpdates)
+  {
+    if (flattenedUpdates.empty())
+    {
+      std::cerr << "No client updates received." << std::endl;
+      return {};
+    }
+
+    // Determine the size of the flattened updates
+    size_t flattenedSize = flattenedUpdates[0].size();
+
+    // Initialize a vector to store the average
+    std::vector<float> globalAverage(flattenedSize, 0.0f);
+
+    // Sum up the updates
+    for (const auto& clientUpdate : flattenedUpdates)
+    {
+      if (clientUpdate.size() != flattenedSize)
+      {
+        std::cerr << "Inconsistent update sizes from clients." << std::endl;
+        return {};
+      }
+
+      // Accumulate the updates
+      for (size_t i = 0; i < flattenedSize; ++i)
+      {
+        globalAverage[i] += clientUpdate[i];
+      }
+    }
+
+    // Calculate the average
+    for (size_t i = 0; i < flattenedSize; ++i)
+    {
+      globalAverage[i] /= flattenedUpdates.size();
+    }
+
+    return globalAverage;
+  }
 
   nc::NdArray<double> processJson(const nlohmann::json& jsonValue)
   {
@@ -530,6 +569,7 @@ namespace app
           double learning_rate =
             0.1; // You can adjust the learning rate as needed
           nc::NdArray<double> deserialized_weights;
+          std::vector<std::vector<float>> flattenedUpdates;
           weights_handle->foreach(
             [&](const size_t& weight_id, const nlohmann::json& weights_json)
               -> bool {
@@ -542,48 +582,11 @@ namespace app
                 {
                   nlohmann::json json_weights =
                     nlohmann::json::parse(model_weight);
-                  //               std::string weightsString = R"(
-                  //     [
-                  //         [[-0.19662362337112427, -0.003338967217132449,
-                  //         ...]],
-                  //         [[-0.10646957159042358, -0.019710950553417206,
-                  //         ...]],
-                  //         // Add more layers as needed
-                  //     ]
-                  // )";
 
-                  // Parse the string into a JSON object
-
-                  // Initialize a sum for federated averaging
-                  std::vector<std::vector<double>> sum(
-                    json_weights[0].size(),
-                    std::vector<double>(json_weights[0][0].size(), 0.0));
-
-                  // Access the values
-                  for (const auto& weights_layer : json_weights)
-                  {
-                    for (size_t i = 0; i < weights_layer.size(); ++i)
-                    {
-                      for (size_t j = 0; j < weights_layer[i].size(); ++j)
-                      {
-                        double value = weights_layer[i][j];
-                        // Perform operations as needed (e.g., apply federated
-                        // averaging) For this example, we'll simply accumulate
-                        // the weights
-                        sum[i][j] += value;
-                      }
-                    }
-                  }
-
-                  // Calculate the average
-                  size_t numClients = json_weights.size();
-                  for (size_t i = 0; i < sum.size(); ++i)
-                  {
-                    for (size_t j = 0; j < sum[i].size(); ++j)
-                    {
-                      sum[i][j] /= numClients;
-                    }
-                  }
+                    // print the shape of the json weights
+                    CCF_APP_INFO("json_weights shape: {}", json_weights.size());
+                  flattenedUpdates.push_back(
+                    json_weights.get<std::vector<float>>());
                 }
               }
               catch (const std::exception& e)
@@ -597,10 +600,18 @@ namespace app
             });
           try
           {
+            std::vector<float> globalAverage =
+              federatedAveraging(flattenedUpdates);
+      // print the global average shape and flatten updates shape
+            CCF_APP_INFO( "globalAverage shape: {}", globalAverage.size());
+            CCF_APP_INFO( "flattenedUpdates shape: {}", flattenedUpdates.size());
+
+              
+              global_models_handle->put(model_id, globalAverage);
+
             nlohmann::json payload = {
               {"model_id", model_id},
-              {"message", "Global model retrieved successfully"},
-              {"global_model", std::move(deserialized_weights)}};
+              {"message", "Global model retrieved successfully"},};
             auto response = ccf::make_success(std::move(payload));
             return response;
 
