@@ -17,17 +17,16 @@ set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
 
 find_package(Boost REQUIRED COMPONENTS log)
-
+include_directories(3rdparty/NumCpp/include)
 if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
     # target_link_libraries(lskv PRIVATE ${Boost_LIBRARIES})
 endif()
-include_directories(3rdparty/NumCpp/include)
-# link_directories(3rdparty/NumCpp/lib)
+
+set(EIGEN_PATH "${CMAKE_SOURCE_DIR}/../../eigen-3.4.0")
 
 
-
-# target_link_libraries(your_target_name NumCpp)
+include_directories(${EIGEN_PATH})
 
 option(CCF_UNSAFE "build with unsafe options" OFF)
 if(${CCF_UNSAFE})
@@ -44,7 +43,7 @@ if(NOT TARGET ${CCF})
   find_package(${CCF} REQUIRED)
 endif()
 
-# include_directories(3rdparty/NumCpp/include)
+
 
 
 
@@ -71,8 +70,6 @@ else()
   message(STATUS "Using terse logging")
 endif()
 
-
-# target_link_libraries(lskv PRIVATE Boost::log)
 
 
 # Generate an ephemeral signing key
