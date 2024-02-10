@@ -839,7 +839,7 @@ namespace app
         "/model/download/global",
         HTTP_GET,
         ccf::json_read_only_adapter(get_model),
-        ccf::no_auth_required)
+       ccf::no_auth_required)
         .set_auto_schema<void, nlohmann::json>()
         .add_query_parameter<size_t>("model_id")
         .install();
