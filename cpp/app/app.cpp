@@ -584,8 +584,8 @@ namespace app
                   nlohmann::json json_weights =
                     nlohmann::json::parse(model_weight);
 
-                    // print the shape of the json weights
-                    CCF_APP_INFO("json_weights shape: {}", json_weights.size());
+                  // print the shape of the json weights
+                  CCF_APP_INFO("json_weights shape: {}", json_weights.size());
                   flattenedUpdates.push_back(
                     json_weights.get<std::vector<float>>());
                 }
@@ -603,16 +603,16 @@ namespace app
           {
             std::vector<float> globalAverage =
               federatedAveraging(flattenedUpdates);
-      // print the global average shape and flatten updates shape
-            CCF_APP_INFO( "globalAverage shape: {}", globalAverage.size());
-            CCF_APP_INFO( "flattenedUpdates shape: {}", flattenedUpdates.size());
+            // print the global average shape and flatten updates shape
+            CCF_APP_INFO("globalAverage shape: {}", globalAverage.size());
+            CCF_APP_INFO("flattenedUpdates shape: {}", flattenedUpdates.size());
 
-              
-              global_models_handle->put(model_id, globalAverage);
+            global_models_handle->put(model_id, globalAverage);
 
             nlohmann::json payload = {
               {"model_id", model_id},
-              {"message", "Global model retrieved successfully"},};
+              {"message", "Global model retrieved successfully"},
+            };
             auto response = ccf::make_success(std::move(payload));
             return response;
 
@@ -799,7 +799,7 @@ namespace app
         "/model/download_gloabl_weights",
         HTTP_GET,
         ccf::json_read_only_adapter(get_global_model),
-        ccf::no_auth_required)
+      {ccf::user_cert_auth_policy})
         .set_auto_schema<void, nlohmann::json>()
         .add_query_parameter<size_t>("model_id")
         .install();
@@ -823,15 +823,14 @@ namespace app
         "/model/upload/local_model_weights",
         HTTP_POST,
         ccf::json_adapter(write_weights),
-        ccf::no_auth_required)
+{ccf::user_cert_auth_policy})
         .set_auto_schema<ModelWeightWrite::In, void>()
         .install();
       make_endpoint(
         "/model/aggregate_weights_local",
         HTTP_PUT,
         ccf::json_adapter(aggregate_weights_federated),
-        ccf::no_auth_required)
-        //  {ccf::user_cert_auth_policy})
+{ccf::member_cert_auth_policy})
         // .set_auto_schema<void, double>()
         .add_query_parameter<size_t>("model_id")
         .install();
@@ -839,7 +838,7 @@ namespace app
         "/model/download/global",
         HTTP_GET,
         ccf::json_read_only_adapter(get_model),
-       ccf::no_auth_required)
+{ccf::user_cert_auth_policy})
         .set_auto_schema<void, nlohmann::json>()
         .add_query_parameter<size_t>("model_id")
         .install();
