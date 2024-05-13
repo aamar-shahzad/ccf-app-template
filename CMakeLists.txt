@@ -1,6 +1,3 @@
-# Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the
-# MIT License.
-
 cmake_minimum_required(VERSION 3.16)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.cmake)
@@ -10,12 +7,26 @@ project(
   LANGUAGES C CXX
   VERSION ${LSKV_VERSION_SHORT})
 
-option(
-  COMPILE_TARGET
-  "Compile target to build for, one of [virtual;sgx;snp], defaults to virtual"
-  virtual)
+set(Boost_MAJOR_VERSION 1)
+set(Boost_MINOR_VERSION 71)
+set(Boost_VERSION ${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION}.0)
+  
+set(CCF "ccf_virtual")
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
 
-set(CCF "ccf_${COMPILE_TARGET}")
+find_package(Boost REQUIRED COMPONENTS log)
+include_directories(3rdparty/NumCpp/include)
+if(Boost_FOUND)
+    include_directories(${Boost_INCLUDE_DIRS})
+    # target_link_libraries(lskv PRIVATE ${Boost_LIBRARIES})
+endif()
+
+set(EIGEN_PATH "${CMAKE_SOURCE_DIR}/../../eigen-3.4.0")
+
+
+include_directories(${EIGEN_PATH})
 
 option(CCF_UNSAFE "build with unsafe options" OFF)
 if(${CCF_UNSAFE})
@@ -34,20 +45,19 @@ endif()
 
 
 
-# option(PUBLIC_LEASES
-#        "If enabled, leases are recorded in plaintext in the ledger (insecure!)"
-#        OFF)
+
+
 
 option(VERBOSE_LOGGING "enable verbose logging" OFF)
 
 add_compile_definitions(LSKV_VERSION="${LSKV_VERSION}")
 
 
+
 add_ccf_app(
   lskv
   SRCS
   cpp/app/app.cpp
-
   INCLUDE_DIRS
   "${CCF_DIR}/include/ccf/_private"
   INSTALL_LIBS
@@ -60,6 +70,8 @@ else()
   message(STATUS "Using terse logging")
 endif()
 
+
+
 # Generate an ephemeral signing key
 add_custom_command(
   OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem
@@ -70,3 +82,9 @@ add_custom_target(app_signing_key ALL
 
 sign_app_library(lskv.enclave ${CMAKE_CURRENT_SOURCE_DIR}/oe_sign.conf
                  ${CMAKE_CURRENT_BINARY_DIR}/signing_key.pem INSTALL_LIBS ON)
+
+
+
+
+
+
