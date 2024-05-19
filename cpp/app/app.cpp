@@ -729,6 +729,7 @@ namespace app
         auto response = ccf::make_success(std::move(payload));
         return response;
       };
+
       make_read_only_endpoint(
         "/model/download_gloabl_weights",
         HTTP_GET,
