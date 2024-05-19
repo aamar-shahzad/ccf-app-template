@@ -267,10 +267,11 @@ namespace app
     AppHandlers(ccfapp::AbstractNodeContext& context) :
       ccf::UserEndpointRegistry(context)
     {
-      openapi_info.title = "CCF Sample C++ App";
+      openapi_info.title = "CCF Federated learing Framework";
       openapi_info.description =
-        "This minimal CCF C++ application aims to be "
-        "used as a template for CCF developers.";
+        "This a CCF base blockchain server side  "
+        "it securly store the global model and local model protect against "
+        "member inferance attacks ";
       openapi_info.document_version = "0.0.1";
       auto write = [this](auto& ctx, nlohmann::json&& params) {
         const auto parsed_query =
@@ -409,7 +410,7 @@ namespace app
 
       auto write_weights =
         [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params) {
-          try
+                    try
           {
             CCF_APP_INFO("model weight write endpoint called");
 
