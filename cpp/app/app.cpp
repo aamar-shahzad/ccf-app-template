@@ -564,129 +564,6 @@ namespace app
               "Internal server error occurred while processing the request.");
           }
         };
-      // auto aggregate_weights_federated
-      // =[this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params)
-      // {
-      //     auto start_time = std::chrono::steady_clock::now();
-      //     const auto parsed_query =
-      //       http::parse_query(ctx.rpc_ctx->get_request_query());
-
-      //     std::string error_reason;
-      //     size_t model_id = 0;
-      //     size_t round_no = 0;
-      //     if (
-      //       !http::get_query_value(
-      //         parsed_query, "model_id", model_id, error_reason) ||
-      //       !http::get_query_value(
-      //         parsed_query, "round_no", round_no, error_reason))
-      //     {
-      //       return ccf::make_error(
-      //         HTTP_STATUS_BAD_REQUEST,
-      //         ccf::errors::InvalidQueryParameterValue,
-      //         std::move(error_reason));
-      //     }
-      //     // Retrieve the read-only handle outside of the transaction
-
-      //     auto weights_handle = ctx.tx.template ro<Weights>(WEIGHTS);
-      //     auto global_models_handle =
-      //       ctx.tx.template rw<GlobalModelWeights>(GLOBAL_MODELS);
-      //     double learning_rate =
-      //       0.1; // You can adjust the learning rate as needed
-      //     std::vector<nlohmann::json> local_weights;
-      //     std::vector<size_t> sample_counts;
-      //     // The rest of the function remains the same
-      //     weights_handle->foreach(
-      //       [&](const size_t& weight_id, const nlohmann::json& weights_json)
-      //         -> bool {
-      //         try
-      //         {
-      //           size_t modelId = weights_json["model_id"];
-      //           std::string model_weight = weights_json["model_weight"];
-      //           size_t roundNumber = weights_json["round_no"];
-      //           if (model_id == modelId && roundNumber == round_no)
-      //           {
-      //             {
-      //               local_weights.push_back(model_weight);
-      //               size_t random_sample_count =
-      //                 rand() % 1000 + 1; // Adjust as needed
-      //               sample_counts.push_back(random_sample_count);
-      //             }
-      //           }
-      //           // // Check if the weight belongs to the specified model_id
-      //           and
-      //           // // round_no
-      //           // CCF_APP_INFO(
-      //           //   "deserialized_weights[\"model_id\"] {}",
-      //           //   deserialized_weights["model_id"]);
-
-      //           // if (
-      //           //   deserialized_weights["model_id"] == model_id &&
-      //           //   deserialized_weights["round_no"] == round_no)
-      //           // {
-
-      //           // //
-      //           //
-      //           local_weights.push_back(deserialized_weights["model_weight"]);
-      //           //   size_t random_sample_count =
-      //           //     rand() % 1000 + 1; // Adjust as needed
-      //           //   sample_counts.push_back(random_sample_count);
-      //           // }
-      //         }
-      //         catch (const std::exception& e)
-      //         {
-      //           // Handle decoding or processing errors
-      //           CCF_APP_INFO("Error processing weights: {}", e.what());
-      //           return false; // Stop the iteration on error
-      //         }
-
-      //         return true;
-      //       });
-      //     try
-      //     {
-      //       // Serialize local_weights to strings
-      //       std::vector<std::string> serialized_local_weights;
-      //       for (const auto& weight : local_weights)
-      //       {
-      //         serialized_local_weights.push_back(weight.dump());
-      //       }
-
-      //       // Call federated_average with the serialized weights
-      //       CCF_APP_INFO(
-      //         "serialized_local_weights.size() {}",
-      //         serialized_local_weights.size());
-      //       // auto serialized_averaged_weights =
-      //       // federated_average(serialized_local_weights, sample_counts);
-
-      //       std::vector<double> weighted_avg_update =
-      //         compute_weighted_avg_update(local_weights, sample_counts);
-
-      //       // print the serialized_averaged_weights
-
-      //       return ccf::make_success("Global model updated successfully");
-      //     }
-      //     catch (const std::exception& e)
-      //     {
-      //       CCF_APP_INFO("Exception in aggregate_weights: {}", e.what());
-
-      //       // Handle the exception and return an error response
-      //       return ccf::make_error(
-      //         HTTP_STATUS_INTERNAL_SERVER_ERROR,
-      //         ccf::errors::InternalError,
-      //         "Internal server error occurred while processing the
-      //         request.");
-      //     }
-      //     catch (...)
-      //     {
-      //       CCF_APP_INFO("Unknown exception in aggregate_weights");
-
-      //       // Handle the unknown exception and return an error response
-      //       return ccf::make_error(
-      //         HTTP_STATUS_INTERNAL_SERVER_ERROR,
-      //         ccf::errors::InternalError,
-      //         "Internal server error occurred while processing the
-      //         request.");
-      //     }
-      //   };
 
       auto get_global_model = [this](auto& ctx, nlohmann::json&& params) {
         const auto parsed_query =
@@ -880,8 +757,6 @@ namespace app
         HTTP_PUT,
         ccf::json_adapter(aggregate_weights_federated),
         ccf::no_auth_required)
-        //  {ccf::user_cert_auth_policy})
-        // .set_auto_schema<void, double>()
         .add_query_parameter<size_t>("model_id")
         .install();
       make_read_only_endpoint(
