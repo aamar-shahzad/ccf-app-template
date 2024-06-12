@@ -130,3 +130,7 @@ $(BIN_DIR)/cfssljson: $(BIN_DIR)/cfssl
 .PHONY: clean
 clean:
 	rm -rf $(BUILD)
+	# delete the virtual environment
+	rm -rf .venv
+
+	

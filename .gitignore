@@ -4,3 +4,5 @@
 **/workspace/
 **/venv/
 .gitmodules
+# ingonre all virtualenvs
+**/venv/
