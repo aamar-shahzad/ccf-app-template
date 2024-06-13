@@ -78,6 +78,50 @@ namespace app
     }
     return result;
   }
+  std::vector<std::vector<double>> deserialize_weights(std::string serialized_weights) {
+    // serizlized weights are nest array we need to deserilize it and return the vector of vector of double
+    std::vector<std::vector<double>> weights;
+    try {
+      // Deserialize the weights
+      auto deserialized_weights = json::parse(serialized_weights);
+      // Check if the deserialized weights are an array
+      if (deserialized_weights.is_array()) {
+        // Iterate over the array elements
+        for (const auto& nested_weights : deserialized_weights) {
+          // Check if the nested weights are an array
+          if (nested_weights.is_array()) {
+            // Initialize a vector to store the nested weights
+            std::vector<double> nested_weights_vector;
+            // Iterate over the nested array elements
+            for (const auto& weight : nested_weights) {
+              // Check if the weight is a number
+              if (weight.is_number()) {
+                // Append the weight to the nested weights vector
+                nested_weights_vector.push_back(weight.get<double>());
+              }
+            }
+            // Append the nested weights vector to the weights vector
+            weights.push_back(nested_weights_vector);
+          }
+        }
+      }
+    }
+    catch (const std::exception& e) {
+      // Handle exceptions and return an empty vector
+      CCF_APP_INFO("Exception in deserialize_weights: {}", e.what());
+      return std::vector<std::vector<double>>();
+    }
+    catch (...) {
+      // Handle unknown exceptions and return an empty vector
+      CCF_APP_INFO("Unknown exception in deserialize_weights");
+      return std::vector<std::vector<double>>();
+    }
+    
+    return weights;
+ 
+
+    
+}
 
   void add_weighted_local_weights(
     const nlohmann::json& weights,
@@ -246,34 +290,7 @@ namespace app
 
     using Out = void;
   };
-  std::vector<double> compute_weighted_avg_update(
-    const std::vector<nlohmann::json>& local_weights,
-    const std::vector<size_t>& sample_counts)
-  {
-    size_t num_clients = local_weights.size();
-    size_t total_samples =
-      std::accumulate(sample_counts.begin(), sample_counts.end(), 0);
-
-    std::vector<double> weights(sample_counts.size(), 0.0);
-    for (size_t i = 0; i < num_clients; ++i)
-    {
-      weights[i] = static_cast<double>(sample_counts[i]) / total_samples;
-    }
-
-    size_t model_size = local_weights[0].size();
-    std::vector<double> weighted_avg_update(model_size, 0.0);
-
-    for (size_t i = 0; i < num_clients; ++i)
-    {
-      for (size_t j = 0; j < model_size; ++j)
-      {
-        weighted_avg_update[j] +=
-          weights[i] * local_weights[i][j].get<double>();
-      }
-    }
-
-    return weighted_avg_update;
-  }
+  
   DECLARE_JSON_TYPE(ModelWeightWrite::In);
   DECLARE_JSON_REQUIRED_FIELDS(
     ModelWeightWrite::In, model_id, weights_json, round_no);
@@ -290,6 +307,101 @@ namespace app
 
   class AppHandlers : public ccf::UserEndpointRegistry
   {
+
+
+          std::vector<double> compute_weighted_avg_update(
+    const std::vector<nlohmann::json>& local_weights,
+    const std::vector<size_t>& sample_counts)
+  {
+    // check the size of local weight and detrime it shape and print using CCF_APP
+    CCF_APP_INFO("local_weights.size() :{}", local_weights.size());
+    CCF_APP_INFO("sample_counts.size() :{}", sample_counts.size());
+    // Check if the sizes of local_weights and sample_counts match
+    if (local_weights.size() != sample_counts.size())
+    {
+      CCF_APP_INFO("local_weights.size() != sample_counts.size()");
+      return std::vector<double>();
+    }
+   
+    // parse each local weight and print it using CCF_APP 
+    
+
+// create a variable to store the deserialized weights temporarily this will be multi dimentional vector
+    std::vector<std::vector<std::vector<double>>> tempweights;
+
+    for (size_t i = 0; i < local_weights.size(); ++i)
+    {
+     
+      std::vector<std::vector<double>> weights = deserialize_weights(local_weights[i]);
+      // Check if the weights are empty
+      if (weights.empty())
+      {
+        CCF_APP_INFO("weights.empty()");
+        return std::vector<double>();
+      }
+      else{
+        // print the weights using CCF_APP
+        // CCF_APP_INFO("weights :{}", json(weights).dump());
+        
+
+        tempweights.push_back(weights);
+
+      }
+
+      // check the size of tempweights and detrime it shape and print using CCF_APP
+      CCF_APP_INFO("tempweights.size() :{}", tempweights.size());
+    
+    // iterate the weights at 0 index and print using CCF_APP
+
+// create a multi dimentional vector to store the avg of tempweights[0][l][m] and tempweights[1][l][m]
+    std::vector<std::vector<double>> avgweights;
+
+      for (size_t l = 0; l< tempweights[0].size(); ++l)
+      {
+        if(tempweights[0][l].size()>0){
+          for(size_t m = 0; m< tempweights[0][l].size(); ++m){
+            // CCF_APP_INFO("tempweights[0][l][m] :{}", tempweights[0][l][m]);
+            // compute the aveage of tempweights[0][l][m] and tempweights[1][l][m] and print using CCF_APP
+            double avg = (tempweights[0][l][m] + tempweights[1][l][m])/2;
+            CCF_APP_INFO("avg :{}", avg);
+            // add this 
+
+          }
+          
+        }
+        else{
+          CCF_APP_INFO("tempweights[0][l] is empty");
+        }
+      
+      }
+      
+   
+      
+   
+   
+      
+  
+   
+
+
+  
+
+
+
+
+
+    
+
+
+    }
+
+  
+
+
+   
+ 
+    return std::vector<double>();
+  }
   public:
     AppHandlers(ccfapp::AbstractNodeContext& context) :
       ccf::UserEndpointRegistry(context)
@@ -332,6 +444,7 @@ namespace app
         // Customize the behavior of the default route here
         return ccf::make_success("Welcome to the CCF Sample C++ App!");
       };
+
 
       auto read = [this](auto& ctx, nlohmann::json&& params) {
         const auto parsed_query =
@@ -511,7 +624,7 @@ namespace app
           double learning_rate =
             0.1; // You can adjust the learning rate as needed
           std::vector<nlohmann::json> local_weights;
-          std::vector<size_t> sample_counts;
+        
 
           weights_handle->foreach(
             [&](const size_t& weight_id, const nlohmann::json& weights_json)
@@ -520,30 +633,44 @@ namespace app
               {
                 size_t modelId = weights_json["model_id"];
                 nlohmann::json model_weight = weights_json["model_weight"];
-
-                size_t roundNumber = weights_json["round_no"];
-                if (model_id == modelId && roundNumber == round_no)
+                size_t roundNo = weights_json["round_no"];
+                if (modelId == model_id&& roundNo == round_no)
                 {
                   local_weights.push_back(model_weight);
-                  size_t random_sample_count =
-                    rand() % 1000 + 1; // Adjust as needed
-                  sample_counts.push_back(random_sample_count);
                 }
+              
               }
               catch (const std::exception& e)
               {
                 CCF_APP_INFO("Error processing weights: {}", e.what());
                 return false; // Stop the iteration on error
+            
               }
+
               return true;
             });
 
           try
           {
-            // Call federated_average with the local_weights in JSON format
-            CCF_APP_INFO("local_weights.size() {}", local_weights.size());
+      
+            // Compute the weighted average update
+            std::vector<size_t> sample_counts(local_weights.size(), 1);
             std::vector<double> weighted_avg_update =
               compute_weighted_avg_update(local_weights, sample_counts);
+           
+            // CCF_APP_INFO("weighted_avg_update :{}", weighted_avg_update);
+            // // Update the global model
+            // auto global_model_entry = global_models_handle->get(model_id);
+            // if (!global_model_entry.has_value())
+            // {
+            //   return ccf::make_error(
+            //     HTTP_STATUS_NOT_FOUND,
+            //     ccf::errors::ResourceNotFound,
+            //     fmt::format(
+            //       "Cannot find global model for id \"{}\".", model_id));
+            // }
+         
+        
 
             return ccf::make_success("Global model updated successfully");
           }

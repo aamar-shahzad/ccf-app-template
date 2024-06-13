@@ -88,6 +88,7 @@
         "__nullptr": "cpp",
         "cfenv": "cpp",
         "typeindex": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "__functional_base": "cpp"
     }
 }
