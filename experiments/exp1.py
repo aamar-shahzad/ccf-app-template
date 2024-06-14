@@ -10,6 +10,18 @@ from tensorflow.keras.models import load_model, Sequential
 from tensorflow.keras.layers import Dense, Conv2D, Flatten, MaxPooling2D
 from tensorflow.keras.utils import to_categorical
 import tensorflow as tf
+import tensorflow as tf
+
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
+
+tf.config.threading.set_inter_op_parallelism_threads(4)  # Adjust as needed
+tf.config.threading.set_intra_op_parallelism_threads(4)  # Adjust as needed
 
 RSA_SIZE = 2048
 DEFAULT_CURVE = "secp384r1"
@@ -102,7 +114,9 @@ def aggregate_weights(model_id, round_no, user_cert, user_key):
         raise Exception(f"Failed to aggregate weights. Status code: {response.status_code}")
 
 def train_model(model, X_train, y_train, X_test, y_test, user_id, round_no, epochs=1):
-    history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=epochs)
+    batch_size = 16  # Example reduced batch size
+    history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=epochs, batch_size=batch_size)
+
     return history.history['loss']
 
 def serialize_model(model):
@@ -262,6 +276,7 @@ for round_no in range(1, num_rounds + 1):
         y_train_user = y_train_user0 if user_id == 0 else y_train_user1
         gradients = compute_gradients(local_model_user0 if user_id == 0 else local_model_user1, X_train_user, y_train_user)
         serialized_gradients = serialize_gradients(gradients)
+        print(f"User {user_id} - Round {round_no} - Gradients Length: {len(serialized_gradients)}")
         upload_gradients(serialized_gradients, user0_cert_path if user_id == 0 else user1_cert_path, user0_privk_path if user_id == 0 else user1_privk_path, round_no, model_id=initial_model_id)
     
     global_gradients = download_global_gradients(user0_cert_path, user0_privk_path, model_id=initial_model_id)
