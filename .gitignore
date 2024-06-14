@@ -6,3 +6,5 @@
 .gitmodules
 # ingonre all virtualenvs
 **/venv/
+# ignore tem model .h5 files
+**/*.h5
