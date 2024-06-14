@@ -245,12 +245,14 @@ namespace app
   using Model = kv::Map<size_t, nlohmann::json>;
   using Weights = kv::Map<size_t, nlohmann::json>; // Model weights
   using GlobalModelWeights = kv::Map<size_t, nlohmann::json>;
+  using Gradients= kv::Map<size_t, nlohmann::json>;
 
   static constexpr auto GLOBAL_MODELS = "global_models";
   static constexpr auto USERS = "users";
   static constexpr auto MODELS = "models";
   static constexpr auto WEIGHTS = "weights";
   static constexpr auto RECORDS = "records";
+  static constexpr auto GRADIENTS = "gradients";
 
   // API types
   struct Write
@@ -290,10 +292,26 @@ namespace app
 
     using Out = void;
   };
+  struct ModelGradientWrite
+  {
+    struct In
+    {
+      size_t model_id;
+      nlohmann::json gradients_json; // Change the type to nlohmann::json
+      size_t round_no;
+    };
+
+    using Out = void;
+  };
   
   DECLARE_JSON_TYPE(ModelWeightWrite::In);
   DECLARE_JSON_REQUIRED_FIELDS(
     ModelWeightWrite::In, model_id, weights_json, round_no);
+
+  DECLARE_JSON_TYPE(ModelGradientWrite::In);
+  DECLARE_JSON_REQUIRED_FIELDS(
+    ModelGradientWrite::In, model_id, gradients_json, round_no);
+
   DECLARE_JSON_TYPE(Write::In);
   DECLARE_JSON_REQUIRED_FIELDS(Write::In, msg);
 
@@ -374,23 +392,6 @@ namespace app
         }
       
       }
-      
-   
-      
-   
-   
-      
-  
-   
-
-
-  
-
-
-
-
-
-    
 
 
     }
@@ -440,9 +441,14 @@ namespace app
         return ccf::make_success();
       };
 
-      auto default_route = [this](ccf::endpoints::EndpointContext& ctx) {
-        // Customize the behavior of the default route here
-        return ccf::make_success("Welcome to the CCF Sample C++ App!");
+      auto default_route = [this](auto& ctx, nlohmann::json&& params) {
+        // retrun a message in json format
+      // create a message in json format
+        nlohmann::json j = {
+          {"message", "Welcome to the CCF Federated Learning Framework"}};
+        return ccf::make_success(j);
+
+        
       };
 
 
@@ -588,6 +594,57 @@ namespace app
           catch (...)
           {
             CCF_APP_INFO("Unknown exception in write_weights");
+
+            // Handle the unknown exception and return an error response
+            return ccf::make_error(
+              HTTP_STATUS_INTERNAL_SERVER_ERROR,
+              ccf::errors::InternalError,
+              "Internal server error occurred while processing the request.");
+          }
+        };
+
+
+              auto write_gradients =
+        [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params) {
+          try
+          {
+            CCF_APP_INFO("model gradeents write endpoint called");
+           auto gradients_handle = ctx.tx.template rw<Gradients>(GRADIENTS);
+            const auto in = params.get<ModelGradientWrite::In>();
+            if (in.gradients_json.is_null())
+            {
+              return ccf::make_error(
+                HTTP_STATUS_BAD_REQUEST,
+                ccf::errors::InvalidInput,
+                "Invalid or empty  payload.");
+            }
+            size_t round_no = in.round_no;
+            auto model_gradients = in.gradients_json;
+            size_t model_id = in.model_id;
+            nlohmann::json serializedObject = {
+              {"round_no", round_no},
+              {"model_gradients", model_gradients},
+              {"model_id", model_id}};
+            auto serializedString = serializedObject.dump();
+            gradients_handle->put(gradients_handle->size(), serializedObject);
+            nlohmann::json payload = {{"message", "Model gradients received"}};
+            auto response = ccf::make_success(std::move(payload));
+            return response;
+          }
+          catch (const std::exception& e)
+          {
+            
+            CCF_APP_INFO("Exception in write  gradients: {}", e.what());
+
+            // Handle the exception and return an error response
+            return ccf::make_error(
+              HTTP_STATUS_INTERNAL_SERVER_ERROR,
+              ccf::errors::InternalError,
+              "Internal server error occurred while processing the request.");
+          }
+          catch (...)
+          {
+            CCF_APP_INFO("Unknown exception in write gradients");
 
             // Handle the unknown exception and return an error response
             return ccf::make_error(
@@ -847,7 +904,14 @@ namespace app
         auto response = ccf::make_success(std::move(payload));
         return response;
       };
-
+      
+  make_read_only_endpoint(
+        "/status",
+        HTTP_GET,
+        ccf::json_read_only_adapter(default_route),
+        ccf::no_auth_required)
+        .set_auto_schema<void, nlohmann::json>()
+        .install();
       make_read_only_endpoint(
         "/model/download_gloabl_weights",
         HTTP_GET,
@@ -856,6 +920,8 @@ namespace app
         .set_auto_schema<void, nlohmann::json>()
         .add_query_parameter<size_t>("model_id")
         .install();
+     
+    
 
       make_endpoint(
         "/user/add",
@@ -876,6 +942,13 @@ namespace app
         "/model/upload/local_model_weights",
         HTTP_POST,
         ccf::json_adapter(write_weights),
+        ccf::no_auth_required)
+        .set_auto_schema<ModelWeightWrite::In, void>()
+        .install();
+        make_endpoint(
+        "/model/upload/local_gradients",
+        HTTP_POST,
+        ccf::json_adapter(write_gradients),
         ccf::no_auth_required)
         .set_auto_schema<ModelWeightWrite::In, void>()
         .install();
