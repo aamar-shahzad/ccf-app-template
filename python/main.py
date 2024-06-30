@@ -27,12 +27,12 @@ def clear_results_directory(directory):
 # Create results directory if it doesn't exist
 results_dir = "results"
 os.makedirs(results_dir, exist_ok=True)
-clear_results_directory(results_dir)
+# clear_results_directory(results_dir)
 
 check_server_health()
 
 (X_train, y_train), (X_test, y_test) = load_and_preprocess_mnist()
-num_users = 2
+num_users = 9
 X_train_users, y_train_users = split_data(X_train, y_train, num_users)
 global_model = create_lenet5_model_with_regularization()
 
@@ -54,15 +54,22 @@ time_records = []
 
 local_model_copies = []
 for user_id in range(num_users):
-    local_modelCopy = download_global_model(cert_paths[f"user{user_id}_cert"],cert_paths[f"user{user_id}_privk"],user_id=user_id, model_id=initial_model_id)
-    print("lcoal model copy downloaded successfully",local_modelCopy)
-    if local_modelCopy is not None:
-        print(f"Global weights downloaded successfully for user {user_id}")
-        local_model_copies.append(local_modelCopy)
+    try:
+        local_modelCopy = download_global_model(cert_paths[f"user{user_id}_cert"],cert_paths[f"user{user_id}_privk"],user_id=user_id, model_id=initial_model_id)
+        if local_modelCopy is not None:
+            print(f"Global weights downloaded successfully for user {user_id}")
+            local_model_copies.append(local_modelCopy)
+
+        else:
+            raise Exception("Global weights download failed")
+   
+    except Exception as e:
     
+        print(f"Error creating local model for user {user_id}: {e}")
+    finally:
+        time.sleep(2)
     
-    else:
-        raise Exception("Global weights download failed")
+   
     
 
 
