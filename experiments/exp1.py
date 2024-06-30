@@ -6,23 +6,17 @@ import base64
 import time
 import matplotlib.pyplot as plt
 from tensorflow.keras.datasets import mnist
-from tensorflow.keras.models import load_model, Sequential
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Conv2D, Flatten, MaxPooling2D
 from tensorflow.keras.utils import to_categorical
 import tensorflow as tf
-import tensorflow as tf
+import joblib
 
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-    try:
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-    except RuntimeError as e:
-        print(e)
 
-tf.config.threading.set_inter_op_parallelism_threads(4)  # Adjust as needed
-tf.config.threading.set_intra_op_parallelism_threads(4)  # Adjust as needed
 
+
+
+# Constants
 RSA_SIZE = 2048
 DEFAULT_CURVE = "secp384r1"
 FAST_CURVE = "secp256r1"
@@ -34,9 +28,11 @@ num_users = 4
 url = server + "/app/api/metrics"
 workspace_path = "workspace"
 
+# Helper function to get file path
 def get_workspace_path(file_name):
     return os.path.join(os.getcwd(), workspace_path, file_name)
 
+# Paths to certificate and key files
 service_cert_path = get_workspace_path("sandbox_common/service_cert.pem")
 user0_cert_path = get_workspace_path("sandbox_common/user0_cert.pem")
 user0_privk_path = get_workspace_path("sandbox_common/user0_privk.pem")
@@ -45,6 +41,7 @@ user1_privk_path = get_workspace_path("sandbox_common/user1_privk.pem")
 member0_cert_path = get_workspace_path("sandbox_common/member0_cert.pem")
 member0_privk_path = get_workspace_path("sandbox_common/member0_privk.pem")
 
+# Check server health
 def checkServerHealth():
     try:
         response = requests.get(f'{server}/app/status', verify=service_cert_path)
@@ -57,6 +54,7 @@ def checkServerHealth():
 
 checkServerHealth()
 
+# Get response from server
 try:
     response = requests.get(url, verify=service_cert_path)
 
@@ -75,6 +73,7 @@ try:
 except requests.exceptions.RequestException as e:
     print("Error making request:", e)
 
+# Function to compute gradients
 def compute_gradients(model, X, y):
     with tf.GradientTape() as tape:
         predictions = model(X, training=True)
@@ -82,6 +81,7 @@ def compute_gradients(model, X, y):
     gradients = tape.gradient(loss, model.trainable_weights)
     return gradients
 
+# Function to aggregate weights
 def aggregate_weight(client_weights_list):
     if client_weights_list:
         total_weights = sum(client_weights_list, [])
@@ -90,6 +90,7 @@ def aggregate_weight(client_weights_list):
     else:
         return []
 
+# Function to create the model
 def create_model():
     model = Sequential([
         Conv2D(64, kernel_size=3, activation='relu', input_shape=(28, 28, 1)),
@@ -102,6 +103,7 @@ def create_model():
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
+# Function to aggregate weights
 def aggregate_weights(model_id, round_no, user_cert, user_key):
     response = requests.put(
         url=f"{server}/app/model/aggregate_weights_local?model_id={model_id}&round_no={round_no}",
@@ -113,17 +115,20 @@ def aggregate_weights(model_id, round_no, user_cert, user_key):
     else:
         raise Exception(f"Failed to aggregate weights. Status code: {response.status_code}")
 
+# Function to train the model
 def train_model(model, X_train, y_train, X_test, y_test, user_id, round_no, epochs=1):
-    batch_size = 16  # Example reduced batch size
+    batch_size = 2
     history = model.fit(X_train, y_train, validation_data=(X_test, y_test), epochs=epochs, batch_size=batch_size)
-
     return history.history['loss']
 
+# Function to serialize the model
 def serialize_model(model):
-    model.save('temp_model.keras')
-    with open('temp_model.keras', 'rb') as file:
+    with open('temp_model.pkl', 'wb') as file:
+        joblib.dump(model, file)
+    with open('temp_model.pkl', 'rb') as file:
         return base64.b64encode(file.read()).decode('utf-8')
 
+# Function to upload the initial model
 def upload_initial_model(model_base64, user_cert, user_key):
     payload = {
         "global_model": {
@@ -148,6 +153,7 @@ def upload_initial_model(model_base64, user_cert, user_key):
         print(f"Failed to upload initial model. Status code: {response.status_code}")
         return None
 
+# Function to flatten weights
 def flatten_weights(model):
     flat_weights = []
     for layer in model.layers:
@@ -156,11 +162,13 @@ def flatten_weights(model):
             flat_weights.append(weights[0].flatten())
     return np.concatenate(flat_weights)
 
+# Function to deserialize weights
 def deserialize_weights(serialized_weights, model):
     flat_weights = np.array(serialized_weights)
     unflattened_weights = unflatten_weights(model, flat_weights)
     return unflattened_weights
 
+# Function to unflatten weights
 def unflatten_weights(model, flat_weights):
     unflattened_weights = []
     index = 0
@@ -174,14 +182,17 @@ def unflatten_weights(model, flat_weights):
     unflattened_weights = [np.array(arr) for arr in unflattened_weights]
     return unflattened_weights
 
+# Function to serialize gradients
 def serialize_gradients(gradients):
     serialized_gradients = [grad.tolist() for grad in gradients]
     return json.dumps(serialized_gradients)
 
+# Function to deserialize gradients
 def deserialize_gradients(serialized_gradients):
     gradients_list = json.loads(serialized_gradients)
     return [np.array(grad) for grad in gradients_list]
 
+# Function to upload gradients
 def upload_gradients(gradients_base64, user_cert, user_key, round_no, model_id=None):
     print(f"Uploading gradients for Round {round_no}...")
     payload = {
@@ -200,6 +211,7 @@ def upload_gradients(gradients_base64, user_cert, user_key, round_no, model_id=N
     else:
         raise Exception(f"Failed to upload gradients. Status code: {response.status_code}")
 
+# Function to download global gradients
 def download_global_gradients(user_cert, user_key, model_id):
     try:
         response = requests.get(
@@ -222,13 +234,16 @@ def download_global_gradients(user_cert, user_key, model_id):
         print("Error making request:", e)
     return None
 
+# Function to apply gradients
 def apply_gradients(model, gradients):
     model.optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
+# Function to delete temporary model file
 def delete_temp_model_file():
-    if os.path.exists('temp_model.keras'):
-        os.remove('temp_model.keras')
+    if os.path.exists('temp_model.pkl'):
+        os.remove('temp_model.pkl')
 
+# Function to plot loss curve
 def plot_loss_curve(round_loss_dict):
     rounds = list(round_loss_dict.keys())
     losses_user0 = [round_loss_dict[round][0] for round in rounds]
@@ -244,6 +259,7 @@ def plot_loss_curve(round_loss_dict):
     plt.grid()
     plt.show()
 
+# Load MNIST data
 (X_train, y_train), (X_test, y_test) = mnist.load_data()
 
 X_train = X_train.reshape(X_train.shape[0], 28, 28, 1)

@@ -8,3 +8,8 @@
 **/venv/
 # ignore tem model .h5 files
 **/*.h5
+# ignore all .pyc files
+**/*.pyc
+# ignore all docker files
+**/Dockerfile
+# ignore all .env files

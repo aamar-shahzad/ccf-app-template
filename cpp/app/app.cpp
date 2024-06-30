@@ -292,6 +292,20 @@ namespace app
 
     using Out = void;
   };
+
+struct  ModelRead
+{
+  struct In
+  {
+   size_t model_id;
+   size_t round_no;
+  };
+  // return json  
+  using Out = nlohmann::json;
+  
+};
+
+
   struct ModelGradientWrite
   {
     struct In
@@ -322,6 +336,9 @@ namespace app
   // Declare JSON types for ModelWrite
   DECLARE_JSON_TYPE(ModelWrite::In);
   DECLARE_JSON_REQUIRED_FIELDS(ModelWrite::In, global_model);
+
+  DECLARE_JSON_TYPE(ModelRead::In);
+  DECLARE_JSON_REQUIRED_FIELDS(ModelRead::In, model_id, round_no);
 
   class AppHandlers : public ccf::UserEndpointRegistry
   {
@@ -653,6 +670,11 @@ namespace app
               "Internal server error occurred while processing the request.");
           }
         };
+
+
+
+
+
       auto aggregate_weights_federated =
         [this](ccf::endpoints::EndpointContext& ctx, nlohmann::json&& params) {
           CCF_APP_INFO("Aggerating FL");
@@ -714,19 +736,6 @@ namespace app
             std::vector<size_t> sample_counts(local_weights.size(), 1);
             std::vector<double> weighted_avg_update =
               compute_weighted_avg_update(local_weights, sample_counts);
-           
-            // CCF_APP_INFO("weighted_avg_update :{}", weighted_avg_update);
-            // // Update the global model
-            // auto global_model_entry = global_models_handle->get(model_id);
-            // if (!global_model_entry.has_value())
-            // {
-            //   return ccf::make_error(
-            //     HTTP_STATUS_NOT_FOUND,
-            //     ccf::errors::ResourceNotFound,
-            //     fmt::format(
-            //       "Cannot find global model for id \"{}\".", model_id));
-            // }
-         
         
 
             return ccf::make_success("Global model updated successfully");
@@ -747,6 +756,80 @@ namespace app
               ccf::errors::InternalError,
               "Internal server error occurred while processing the request.");
           }
+        };
+      auto downloadWeights =[this](auto& ctx, nlohmann::json&& params) {
+          CCF_APP_INFO("Downloading weights");
+          auto start_time = std::chrono::steady_clock::now();
+          // get model_id and round_no from the query
+          const auto parsed_query =
+            http::parse_query(ctx.rpc_ctx->get_request_query());
+          std::string error_reason;
+          size_t model_id = 0;
+          size_t round_no = 0;
+          if (
+            !http::get_query_value(
+              parsed_query, "model_id", model_id, error_reason) ||
+            !http::get_query_value(
+              parsed_query, "round_no", round_no, error_reason))
+          {
+            return ccf::make_error(
+              HTTP_STATUS_BAD_REQUEST,
+              ccf::errors::InvalidQueryParameterValue,
+              std::move(error_reason));
+          }
+          // log round number and model id
+          CCF_APP_INFO("round_no :{}", round_no);
+          CCF_APP_INFO("model_id :{}", model_id);
+
+          auto weights_handle = ctx.tx.template ro<Weights>(WEIGHTS);
+        
+          std::vector<nlohmann::json> local_weights;
+        
+
+          weights_handle->foreach(
+            [&](const size_t& weight_id, const nlohmann::json& weights_json)
+              -> bool {
+              try
+              {
+                size_t modelId = weights_json["model_id"];
+                nlohmann::json model_weight = weights_json["model_weight"];
+                size_t roundNo = weights_json["round_no"];
+                if (modelId == model_id&& roundNo == round_no)
+                {
+                  local_weights.push_back(model_weight);
+                }
+              
+              }
+              catch (const std::exception& e)
+              {
+                CCF_APP_INFO("Error processing weights: {}", e.what());
+                return false; // Stop the iteration on error
+            
+              }
+
+              return true;
+            });
+      try
+      {
+        // retrun the weights in json format
+        // log message
+        CCF_APP_INFO("Sending the weights in json format");
+                  return ccf::make_success(local_weights);
+
+
+      }
+      catch (const std::exception& e)
+      {
+        CCF_APP_INFO("Exception in downloadWeights: {}", e.what());
+        return ccf::make_error(
+          HTTP_STATUS_INTERNAL_SERVER_ERROR,
+          ccf::errors::InternalError,
+          "Internal server error occurred while processing the request.");
+      } 
+          
+
+
+        
         };
 
       auto get_global_model = [this](auto& ctx, nlohmann::json&& params) {
@@ -920,6 +1003,16 @@ namespace app
         .set_auto_schema<void, nlohmann::json>()
         .add_query_parameter<size_t>("model_id")
         .install();
+          make_read_only_endpoint(
+        "/model/download/local_model_weights",
+        HTTP_GET,
+        ccf::json_read_only_adapter(downloadWeights),
+        ccf::no_auth_required)
+        .set_auto_schema<void, nlohmann::json>()
+        .add_query_parameter<size_t>("model_id")
+        .add_query_parameter<size_t>("round_no")
+        .install();
+    
      
     
 
@@ -945,6 +1038,8 @@ namespace app
         ccf::no_auth_required)
         .set_auto_schema<ModelWeightWrite::In, void>()
         .install();
+  
+
         make_endpoint(
         "/model/upload/local_gradients",
         HTTP_POST,
