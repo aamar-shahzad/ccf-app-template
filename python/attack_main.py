@@ -74,14 +74,18 @@ for user_id in range(num_users):
     finally:
         time.sleep(1)
 
-# Simulate a malicious user
-malicious_user_id = 0
+#
+# create a function that generate retrun malicious user id among the users randomly
+def getMaliciousUser(num_users):
+    return random.randint(0, num_users - 1)
 
 for round_no in range(1, num_rounds + 1):
     round_start_time = time.time()
     participating_users = random.randint(1, num_users)
     num_participating_users.append(participating_users)
     local_weights = []
+    malicious_user_id = getMaliciousUser(num_users)
+    print("Malicious user id: ", malicious_user_id)
 
     for user_id in range(num_users):
         print(f"User {user_id} is participating in round {round_no}")

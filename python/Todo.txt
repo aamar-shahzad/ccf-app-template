@@ -5,3 +5,7 @@
 4: they start traing the local model they and upload the updates.
 5: At the end of each round we need to download the moldle update  and do the aggetion 
 6:update gloabl model and upload back to the server and the each user will donwlad and intial the 🎓
+
+
+
+we will do Adaptive Byzantie fedAggeation on server side to remove malicus 👥
