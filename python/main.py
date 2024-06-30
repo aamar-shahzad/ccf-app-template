@@ -70,43 +70,17 @@ for round_no in range(1, num_rounds + 1):
             "latency": (round_end_time - round_start_time) * 1000
         })
 
-# Function to save combined plots for each user
-def save_combined_plots(user_losses_training, user_accuracies_testing):
-    plt.figure(figsize=(14, 7))
-
-    # Plot training loss for all users
-    plt.subplot(1, 2, 1)
-    for user_id in user_losses_training.keys():
-        plt.plot(user_losses_training[user_id][::2], label=f'User {user_id} Loss')  # Even indices are losses
-    plt.title('Training Loss for All Users')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
+# show the training and testing loss and accuracy for each user
+for user_id in range(num_users):
+    plt.plot(user_losses_training[user_id], label=f"User {user_id} training loss")
+    plt.plot(user_accuracies_testing[user_id], label=f"User {user_id} testing accuracy")
+    
+    # add the legend for the plot
     plt.legend()
-
-    # Plot training accuracy for all users
-    plt.subplot(1, 2, 2)
-    for user_id in user_losses_training.keys():
-        plt.plot(user_losses_training[user_id][1::2], label=f'User {user_id} Accuracy')  # Odd indices are accuracies
-    plt.title('Training Accuracy for All Users')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig('combined_training_plots.png')
-    plt.close()
-
-    # Plot testing accuracy for each user
-    for user_id in user_accuracies_testing.keys():
-        plt.figure()
-        plt.plot(user_accuracies_testing[user_id][1::2], label=f'User {user_id} Testing Accuracy')  # Odd indices are accuracies
-        plt.title(f'User {user_id} Testing Accuracy')
-        plt.xlabel('Epoch')
-        plt.ylabel('Accuracy')
-        plt.legend()
-
-        plt.savefig(f'user_{user_id}_testing.png')
-        plt.close()
-
-# Call the function with the user data
-save_combined_plots(user_losses_training, user_accuracies_testing)
+    # add the title to the plot
+    plt.title(f"User {user_id} training and testing metrics")
+    # save figure
+    plt.savefig(f"results/user_{user_id}_training_testing_metrics.png")
+    plt.savefig(f"results/user_{user_id}_training_testing_metrics.pdf")
+    # show the plot
+   
