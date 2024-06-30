@@ -1,0 +1,6 @@
+Results Directory: results/2024-06-30_16-53-06
+Number of Users: 5
+Number of Rounds: 2
+Timestamp: 2024-06-30_16-53-06
+Results saved at: 2024-06-30 16:53:07
+This result under posising attack fro a Users

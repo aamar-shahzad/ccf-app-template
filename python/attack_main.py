@@ -1,3 +1,8 @@
+# In this code we are trying to simulate model poisoning attack. We are downloading the global model weights and then modifying the weights of a malicious user.
+# The malicious user is user 0. We are multiplying the weights by a random number between 0.5 and 1.5. This will cause the model to be poisoned.
+
+# The code is working as expected. The global model is being poisoned by the malicious user. The model is being trained and tested by the other users. The training and testing results are being saved to a CSV file and the plots are being saved to the results directory.
+
 import os
 import random
 import time
@@ -7,7 +12,7 @@ import matplotlib.pyplot as plt
 from config import cert_paths
 from data_processing import load_and_preprocess_mnist, split_data
 from model_handling import create_lenet5_model_with_regularization, serialize_model, deserialize_model
-from server_communication import download_local_model_weights, serialize_weights, upload_model_weights, upload_initial_model, check_server_health,download_global_model
+from server_communication import download_local_model_weights, serialize_weights, upload_model_weights, upload_initial_model, check_server_health, download_global_model
 from training import train_model, evaluate_model
 from aggregation import aggregate_weights
 from plotting import plot_training_testing_results
@@ -68,11 +73,9 @@ for user_id in range(num_users):
         print(f"Error creating local model for user {user_id}: {e}")
     finally:
         time.sleep(1)
-    
-   
-    
 
-
+# Simulate a malicious user
+malicious_user_id = 0
 
 for round_no in range(1, num_rounds + 1):
     round_start_time = time.time()
@@ -93,6 +96,11 @@ for round_no in range(1, num_rounds + 1):
         user_losses_testing[user_id].append(test_loss)
         user_accuracies_testing[user_id].append(test_accuracy)
 
+        if user_id == malicious_user_id:
+            # Malicious user modifies the model weights
+            print(f"User {user_id} is malicious and will poison the model.")
+            poisoned_weights = [weight * random.uniform(0.5, 1.5) for weight in local_model_user.get_weights()]
+            local_model_user.set_weights(poisoned_weights)
         
         local_serialize_weights = serialize_weights(local_model_user)
         if local_serialize_weights is not None:
@@ -106,7 +114,6 @@ for round_no in range(1, num_rounds + 1):
 
         aggregated_weights = aggregate_weights(local_weights_from_server)
         global_model.set_weights(aggregated_weights)
-        # now inlitize the local models with the global model weights
         for user_id in range(num_users):
             local_model_user = local_model_copies[user_id]
             local_model_user.set_weights(aggregated_weights)
