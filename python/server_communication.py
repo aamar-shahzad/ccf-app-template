@@ -162,38 +162,56 @@ def download_global_model(user_cert, user_key, user_id, model_id=None, save_fold
     Returns:
     - Loaded Keras model
     """
-    if(model_id is None):
-        print("Model ID not provided, retrying...")
-        return None
-    else:
-        print("model_id is provided",model_id)
-        print(f"Downloading global model for user {user_id} for round ...")
- 
- 
-    response = requests.get(
-        url=f"{server}/model/download/global?model_id={model_id}",
-        verify=cert_paths["service_cert"],
-        cert=(user_cert, user_key)
-    )
-
-    if response.status_code == 200:
-        model_data = response.json().get("model_details", {})
-        model_base64 = model_data
-
-        if model_base64:
-            # Ensure the save folder exists
-            os.makedirs(save_folder, exist_ok=True)
-            model_path = os.path.join(save_folder, f'user_{user_id}_model.h5')
-            
-            # Write the model data to a file
-            with open(model_path, 'wb') as file:
-                file.write(base64.b64decode(model_base64))
-            
-            # Load and return the model
-            return load_model(model_path)
+    try:
+        if(model_id is None):
+            print("Model ID not provided, retrying...")
+            return None
+     
         else:
-            print("Model data not found in response, retrying...")
-    else:
-        print(f"Failed to download model. Status code: {response.status_code}, retrying...")
+            print("model_id is provided",model_id)
+            print(f"Downloading global model for user {user_id} for round ...")
+ 
+ 
+        response = requests.get(
+            url=f"{server}/model/download/global?model_id={model_id}",
+            verify=cert_paths["service_cert"],
+            cert=(user_cert, user_key)
+        )
 
-    return None
+        if response.status_code == 200:
+            print("Global model downloaded successfully.")
+            model_data = response.json().get("model_details", {})
+            model_base64 = model_data
+
+            if model_base64:
+                # Ensure the save folder exists
+                os.makedirs(save_folder, exist_ok=True)
+                model_path = os.path.join(save_folder, f'user_{user_id}_model.h5')
+                
+                # Write the model data to a file
+                with open(model_path, 'wb') as file:
+                    file.write(base64.b64decode(model_base64))
+                
+                # Load and return the model
+                return load_model(model_path)
+            else:
+                print("Model data not found in response, retrying...")
+        if response.status_code == 404:
+            print("Model not found, retrying...")
+        if response.status_code == 503:
+            print("Server is overloaded, retrying...")
+        
+        if response.status_code == 500:
+            print("Internal server error, retrying...")
+        
+        if response.status_code == 400:
+            print("Bad request, retrying...")
+        else:
+            print(f"Failed to download global model. Status code: {response.status_code}")   
+        return None
+    except Exception as e:
+        print(f"Error downloading global model weights: {e}")
+        return None
+ 
+
+ 

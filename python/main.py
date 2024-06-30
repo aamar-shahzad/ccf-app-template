@@ -32,7 +32,7 @@ os.makedirs(results_dir, exist_ok=True)
 check_server_health()
 
 (X_train, y_train), (X_test, y_test) = load_and_preprocess_mnist()
-num_users = 9
+num_users = 5
 X_train_users, y_train_users = split_data(X_train, y_train, num_users)
 global_model = create_lenet5_model_with_regularization()
 
@@ -67,7 +67,7 @@ for user_id in range(num_users):
     
         print(f"Error creating local model for user {user_id}: {e}")
     finally:
-        time.sleep(2)
+        time.sleep(1)
     
    
     
