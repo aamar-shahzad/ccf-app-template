@@ -1,0 +1,7 @@
+
+1: upload the initial 🎓
+2: download the initila model for all the users.
+3: each user will have a copy of model 
+4: they start traing the local model they and upload the updates.
+5: At the end of each round we need to download the moldle update  and do the aggetion 
+6:update gloabl model and upload back to the server and the each user will donwlad and intial the 🎓

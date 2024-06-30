@@ -5,6 +5,8 @@ import time
 from config import server, cert_paths
 import numpy as np
 from tensorflow.keras.models import Sequential, load_model
+import os
+import base64
 
 def download_global_model_weights(user_cert, user_key, model_id):
     try:
@@ -145,28 +147,53 @@ def check_server_health():
         return False
     
 
-def download_model(user_cert, user_key, user_id, round_no, max_retries=5, model_id=None):
-    attempts = 0
-    while attempts < max_retries:
-        print(f"Attempting to download model for User {user_id}, Round {round_no}, Attempt {attempts + 1}...")
-        response = requests.get(
-            url=f"{server}/app/model/download/global?model_id={model_id}",
-            verify="./workspace/sandbox_common/service_cert.pem",
-            cert=(user_cert, user_key)
-        )
 
-        if response.status_code == 200:
-            model_data = response.json().get("model_details", {})
-            model_base64 = model_data
+def download_global_model(user_cert, user_key, user_id, model_id=None, save_folder='models'):
+    """
+    Downloads the global model for the specified user and saves it to a folder with the user ID in the filename.
+    
+    Parameters:
+    - user_cert: Path to the user's certificate
+    - user_key: Path to the user's private key
+    - user_id: ID of the user
+    - model_id: ID of the model to download (default is None)
+    - save_folder: Folder to save the downloaded model (default is 'models')
+    
+    Returns:
+    - Loaded Keras model
+    """
+    if(model_id is None):
+        print("Model ID not provided, retrying...")
+        return None
+    else:
+        print("model_id is provided",model_id)
+        print(f"Downloading global model for user {user_id} for round ...")
+ 
+ 
+    response = requests.get(
+        url=f"{server}/model/download/global?model_id={model_id}",
+        verify=cert_paths["service_cert"],
+        cert=(user_cert, user_key)
+    )
 
-            if model_base64:
-                with open('temp_model.h5', 'wb') as file:
-                    file.write(base64.b64decode(model_base64))
-                return load_model('temp_model.h5')
-            else:
-                print("Model data not found in response, retrying...")
+    if response.status_code == 200:
+        model_data = response.json().get("model_details", {})
+        model_base64 = model_data
+
+        if model_base64:
+            # Ensure the save folder exists
+            os.makedirs(save_folder, exist_ok=True)
+            model_path = os.path.join(save_folder, f'user_{user_id}_model.h5')
+            
+            # Write the model data to a file
+            with open(model_path, 'wb') as file:
+                file.write(base64.b64decode(model_base64))
+            
+            # Load and return the model
+            return load_model(model_path)
         else:
-            print(f"Failed to download model. Status code: {response.status_code}, retrying...")
+            print("Model data not found in response, retrying...")
+    else:
+        print(f"Failed to download model. Status code: {response.status_code}, retrying...")
 
-        time.sleep(2)  # Delay before retrying
-        attempts += 1
+    return None

@@ -1,3 +1,4 @@
+import os
 import random
 import time
 import json
@@ -6,9 +7,27 @@ import matplotlib.pyplot as plt
 from config import cert_paths
 from data_processing import load_and_preprocess_mnist, split_data
 from model_handling import create_lenet5_model_with_regularization, serialize_model, deserialize_model
-from server_communication import download_local_model_weights, serialize_weights, upload_model_weights, upload_initial_model, check_server_health
+from server_communication import download_local_model_weights, serialize_weights, upload_model_weights, upload_initial_model, check_server_health,download_global_model
 from training import train_model, evaluate_model
 from aggregation import aggregate_weights
+from plotting import plot_training_testing_results
+
+# Function to clear the contents of the results directory
+def clear_results_directory(directory):
+    for filename in os.listdir(directory):
+        file_path = os.path.join(directory, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                os.rmdir(file_path)
+        except Exception as e:
+            print(f"Failed to delete {file_path}. Reason: {e}")
+
+# Create results directory if it doesn't exist
+results_dir = "results"
+os.makedirs(results_dir, exist_ok=True)
+clear_results_directory(results_dir)
 
 check_server_health()
 
@@ -17,8 +36,6 @@ num_users = 2
 X_train_users, y_train_users = split_data(X_train, y_train, num_users)
 global_model = create_lenet5_model_with_regularization()
 
-# Train initial global model
-# train_model(global_model, X_train, y_train, X_test, y_test)
 model_base64 = serialize_model(global_model)
 initial_model_id = upload_initial_model(model_base64, cert_paths["user0_cert"], cert_paths["user0_privk"])
 if initial_model_id is not None:
@@ -26,11 +43,29 @@ if initial_model_id is not None:
 else:
     raise Exception("Initial model upload failed")
 
-num_rounds = 5
+num_rounds = 2
+epoch = 10
 num_participating_users = []
 user_losses_training = {i: [] for i in range(num_users)}
+user_accuracies_training = {i: [] for i in range(num_users)}
+user_losses_testing = {i: [] for i in range(num_users)}
 user_accuracies_testing = {i: [] for i in range(num_users)}
 time_records = []
+
+local_model_copies = []
+for user_id in range(num_users):
+    local_modelCopy = download_global_model(cert_paths[f"user{user_id}_cert"],cert_paths[f"user{user_id}_privk"],user_id=user_id, model_id=initial_model_id)
+    print("lcoal model copy downloaded successfully",local_modelCopy)
+    if local_modelCopy is not None:
+        print(f"Global weights downloaded successfully for user {user_id}")
+        local_model_copies.append(local_modelCopy)
+    
+    
+    else:
+        raise Exception("Global weights download failed")
+    
+
+
 
 for round_no in range(1, num_rounds + 1):
     round_start_time = time.time()
@@ -42,15 +77,17 @@ for round_no in range(1, num_rounds + 1):
         print(f"User {user_id} is participating in round {round_no}")
         X_train_user = X_train_users[user_id]
         y_train_user = y_train_users[user_id]
-        train_loss, train_accuracy = train_model(global_model, X_train_user, y_train_user, X_test, y_test)
-        test_loss, test_accuracy = evaluate_model(global_model, X_test, y_test)
-        # add both loss and accuracy to the respective lists
+        local_model_user = local_model_copies[user_id]
+        train_loss, train_accuracy = train_model(local_model_user, X_train_user, y_train_user, X_test, y_test, epochs=epoch)
+        test_loss, test_accuracy = evaluate_model(local_model_user, X_test, y_test)
+        # add the loss and accuracy to the user's records
         user_losses_training[user_id].append(train_loss)
-        user_losses_training[user_id].append(train_accuracy)
-        user_accuracies_testing[user_id].append(test_loss)
+        user_accuracies_training[user_id].append(train_accuracy)
+        user_losses_testing[user_id].append(test_loss)
         user_accuracies_testing[user_id].append(test_accuracy)
 
-        local_serialize_weights = serialize_weights(global_model)
+        
+        local_serialize_weights = serialize_weights(local_model_user)
         if local_serialize_weights is not None:
             local_weights.append(local_serialize_weights)
             upload_model_weights(local_serialize_weights, cert_paths[f"user{user_id}_cert"], cert_paths[f"user{user_id}_privk"], round_no, initial_model_id)
@@ -70,17 +107,8 @@ for round_no in range(1, num_rounds + 1):
             "latency": (round_end_time - round_start_time) * 1000
         })
 
-# show the training and testing loss and accuracy for each user
-for user_id in range(num_users):
-    plt.plot(user_losses_training[user_id], label=f"User {user_id} training loss")
-    plt.plot(user_accuracies_testing[user_id], label=f"User {user_id} testing accuracy")
-    
-    # add the legend for the plot
-    plt.legend()
-    # add the title to the plot
-    plt.title(f"User {user_id} training and testing metrics")
-    # save figure
-    plt.savefig(f"results/user_{user_id}_training_testing_metrics.png")
-    plt.savefig(f"results/user_{user_id}_training_testing_metrics.pdf")
-    # show the plot
-   
+        print(f"Round {round_no} completed in {round_end_time - round_start_time} seconds")
+
+# Save the training loss and accuracy for each user to a CSV file
+
+plot_training_testing_results(user_losses_training, user_accuracies_training, user_losses_testing, user_accuracies_testing, results_dir)
