@@ -16,9 +16,14 @@ def plot_training_testing_results(user_losses_training, user_accuracies_training
     
     # Create a unique directory based on the current date and time
     # make it more readable like  and add some more information
-    # like the number of users, number of rounds, etc.
+    # 2021-09-01_12-30-45
+    # add the day of weeek and the date and time in the name like this Jan-01-2021 12:30:45 PM
+    timestamp = datetime.now().strftime('%b-%d-%Y_%I-%M-%S_%p')
+  
+    
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+
     results_dir = os.path.join(results_base_dir, timestamp)
     # add all other information a text file in the directory
    

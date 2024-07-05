@@ -1,0 +1,6 @@
+Results Directory: results/2024-06-30_18-12-16
+Number of Users: 5
+Number of Rounds: 2
+Timestamp: 2024-06-30_18-12-16
+Results saved at: 2024-06-30 18:12:17
+Under Attack 👊

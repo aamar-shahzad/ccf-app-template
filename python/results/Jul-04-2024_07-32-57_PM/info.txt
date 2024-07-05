@@ -1,0 +1,5 @@
+Results Directory: results/Jul-04-2024_07-32-57_PM
+Number of Users: 5
+Number of Rounds: 2
+Timestamp: Jul-04-2024_07-32-57_PM
+Results saved at: 2024-07-04 19:32:58

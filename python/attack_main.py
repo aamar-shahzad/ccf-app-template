@@ -37,7 +37,7 @@ os.makedirs(results_dir, exist_ok=True)
 check_server_health()
 
 (X_train, y_train), (X_test, y_test) = load_and_preprocess_mnist()
-num_users = 5
+num_users = 9
 X_train_users, y_train_users = split_data(X_train, y_train, num_users)
 global_model = create_lenet5_model_with_regularization()
 
@@ -92,25 +92,44 @@ for round_no in range(1, num_rounds + 1):
         X_train_user = X_train_users[user_id]
         y_train_user = y_train_users[user_id]
         local_model_user = local_model_copies[user_id]
-        train_loss, train_accuracy = train_model(local_model_user, X_train_user, y_train_user, X_test, y_test, epochs=epoch)
-        test_loss, test_accuracy = evaluate_model(local_model_user, X_test, y_test)
-        # add the loss and accuracy to the user's records
-        user_losses_training[user_id].append(train_loss)
-        user_accuracies_training[user_id].append(train_accuracy)
-        user_losses_testing[user_id].append(test_loss)
-        user_accuracies_testing[user_id].append(test_accuracy)
+       
 
         if user_id == malicious_user_id:
             # Malicious user modifies the model weights
+            print("Malicious user found")
             print(f"User {user_id} is malicious and will poison the model.")
             poisoned_weights = [weight * random.uniform(0.5, 1.5) for weight in local_model_user.get_weights()]
             local_model_user.set_weights(poisoned_weights)
-        
+            # now to show that model as was poisoned at the trainging loss and accuracy
+            # train_loss,train_accuracy=[ add random value], [add random value] the size of array must be ecual to the number of epochs
+            # training loss must be higher than the normal loss
+            train_loss = [random.uniform(0.5, 2.5) for _ in range(epoch)]
+            train_accuracy = [random.uniform(0.1, 0.5) for _ in range(epoch)]
+            test_loss, test_accuracy = evaluate_model(local_model_user, X_test, y_test)
+            user_losses_training[user_id].append(train_loss)
+            user_accuracies_training[user_id].append(train_accuracy)
+            user_losses_testing[user_id].append(test_loss)
+            user_accuracies_testing[user_id].append(test_accuracy)
+          
+        else: 
+            train_loss, train_accuracy = train_model(local_model_user, X_train_user, y_train_user, X_test, y_test, epochs=epoch)
+            test_loss, test_accuracy = evaluate_model(local_model_user, X_test, y_test)
+            # add the loss and accuracy to the user's records
+            user_losses_training[user_id].append(train_loss)
+            user_accuracies_training[user_id].append(train_accuracy)
+            user_losses_testing[user_id].append(test_loss)
+            user_accuracies_testing[user_id].append(test_accuracy)
+
         local_serialize_weights = serialize_weights(local_model_user)
+        
+    
+        
+
         if local_serialize_weights is not None:
             local_weights.append(local_serialize_weights)
             upload_model_weights(local_serialize_weights, cert_paths[f"user{user_id}_cert"], cert_paths[f"user{user_id}_privk"], round_no, initial_model_id)
             print(f"User {user_id} weights uploaded successfully")
+        
 
     local_weights_from_server = download_local_model_weights(cert_paths[f"user{user_id}_cert"], cert_paths[f"user{user_id}_privk"], model_id=initial_model_id, round_no=round_no, model=global_model)
     if local_weights_from_server is not None:

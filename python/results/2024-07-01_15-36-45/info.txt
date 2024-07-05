@@ -1,0 +1,6 @@
+Results Directory: results/2024-07-01_15-36-45
+Number of Users: 9
+Number of Rounds: 2
+Timestamp: 2024-07-01_15-36-45
+Results saved at: 2024-07-01 15:36:46
+Experiment under poising attack 
