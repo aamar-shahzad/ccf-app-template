@@ -153,4 +153,5 @@ for round_no in range(1, num_rounds + 1):
 
 # Save the training loss and accuracy for each user to a CSV file
 
-plot_training_testing_results(user_losses_training, user_accuracies_training, user_losses_testing, user_accuracies_testing, results_dir)
+
+plot_training_testing_results(user_losses_training, user_accuracies_training, user_losses_testing, user_accuracies_testing, time_records, results_dir)
