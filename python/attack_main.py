@@ -37,7 +37,7 @@ os.makedirs(results_dir, exist_ok=True)
 check_server_health()
 
 (X_train, y_train), (X_test, y_test) = load_and_preprocess_mnist()
-num_users = 9
+num_users = 5
 X_train_users, y_train_users = split_data(X_train, y_train, num_users)
 global_model = create_lenet5_model_with_regularization()
 
@@ -48,8 +48,8 @@ if initial_model_id is not None:
 else:
     raise Exception("Initial model upload failed")
 
-num_rounds = 2
-epoch = 10
+num_rounds = 20
+epoch = 1
 num_participating_users = []
 user_losses_training = {i: [] for i in range(num_users)}
 user_accuracies_training = {i: [] for i in range(num_users)}

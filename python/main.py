@@ -42,9 +42,8 @@ if initial_model_id is not None:
     print("Initial model uploaded successfully")
 else:
     raise Exception("Initial model upload failed")
-
-num_rounds = 2
-epoch = 10
+num_rounds = 20
+epoch = 1
 num_participating_users = []
 user_losses_training = {i: [] for i in range(num_users)}
 user_accuracies_training = {i: [] for i in range(num_users)}
@@ -55,24 +54,16 @@ time_records = []
 local_model_copies = []
 for user_id in range(num_users):
     try:
-        local_modelCopy = download_global_model(cert_paths[f"user{user_id}_cert"],cert_paths[f"user{user_id}_privk"],user_id=user_id, model_id=initial_model_id)
+        local_modelCopy = download_global_model(cert_paths[f"user{user_id}_cert"], cert_paths[f"user{user_id}_privk"], user_id=user_id, model_id=initial_model_id)
         if local_modelCopy is not None:
             print(f"Global weights downloaded successfully for user {user_id}")
             local_model_copies.append(local_modelCopy)
-
         else:
             raise Exception("Global weights download failed")
-   
     except Exception as e:
-    
         print(f"Error creating local model for user {user_id}: {e}")
     finally:
         time.sleep(1)
-    
-   
-    
-
-
 
 for round_no in range(1, num_rounds + 1):
     round_start_time = time.time()
@@ -87,13 +78,11 @@ for round_no in range(1, num_rounds + 1):
         local_model_user = local_model_copies[user_id]
         train_loss, train_accuracy = train_model(local_model_user, X_train_user, y_train_user, X_test, y_test, epochs=epoch)
         test_loss, test_accuracy = evaluate_model(local_model_user, X_test, y_test)
-        # add the loss and accuracy to the user's records
         user_losses_training[user_id].append(train_loss)
         user_accuracies_training[user_id].append(train_accuracy)
         user_losses_testing[user_id].append(test_loss)
         user_accuracies_testing[user_id].append(test_accuracy)
 
-        
         local_serialize_weights = serialize_weights(local_model_user)
         if local_serialize_weights is not None:
             local_weights.append(local_serialize_weights)
@@ -106,7 +95,6 @@ for round_no in range(1, num_rounds + 1):
 
         aggregated_weights = aggregate_weights(local_weights_from_server)
         global_model.set_weights(aggregated_weights)
-        # now inlitize the local models with the global model weights
         for user_id in range(num_users):
             local_model_user = local_model_copies[user_id]
             local_model_user.set_weights(aggregated_weights)
@@ -121,6 +109,4 @@ for round_no in range(1, num_rounds + 1):
 
         print(f"Round {round_no} completed in {round_end_time - round_start_time} seconds")
 
-# Save the training loss and accuracy for each user to a CSV file
-
-plot_training_testing_results(user_losses_training, user_accuracies_training, user_losses_testing, user_accuracies_testing, results_dir)
+plot_training_testing_results(user_losses_training, user_accuracies_training, user_losses_testing, user_accuracies_testing, time_records, results_dir)
