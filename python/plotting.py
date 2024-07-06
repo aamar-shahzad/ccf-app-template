@@ -3,6 +3,23 @@
 import matplotlib.pyplot as plt
 import os
 from datetime import datetime
+from enum import Enum
+class AttackType(Enum):
+    """
+    Enum class to represent the type of attack.
+    """
+    POISONING = 1
+    BACKDOOR = 2
+    EAVESDROPPING = 3
+    DATA_THEFT = 4
+    MODEL_REPLACEMENT = 5
+    MODEL_REPLICATION = 6
+    MODEL_INVERSION = 7
+    MEMBERSHIP_INFERENCE = 8
+    INFERENCE_ATTACK = 9
+    MODEL_EXTRACTION = 10
+    MODEL_STEALING = 11
+
 
 def plot_training_testing_results(user_losses_training, user_accuracies_training, user_losses_testing, user_accuracies_testing, time_records, results_base_dir="results"):
     """
