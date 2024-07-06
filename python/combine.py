@@ -11,17 +11,10 @@ from server_communication import download_local_model_weights, serialize_weights
 from training import train_model, evaluate_model
 from aggregation import aggregate_weights
 from plotting import plot_training_testing_results
+# create a function that generate retrun malicious user id among the users randomly
+def getMaliciousUser(num_users):
+    return random.randint(0, num_users - 1)
 
-def clear_results_directory(directory):
-    for filename in os.listdir(directory):
-        file_path = os.path.join(directory, filename)
-        try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                os.rmdir(file_path)
-        except Exception as e:
-            print(f"Failed to delete {file_path}. Reason: {e}")
 
 def run_fl_simulation(malicious=False):
     check_server_health()
@@ -60,6 +53,7 @@ def run_fl_simulation(malicious=False):
             print(f"Error creating local model for user {user_id}: {e}")
         finally:
             time.sleep(1)
+    malicious_user_id = getMaliciousUser(num_users) if malicious else None
 
     for round_no in range(1, num_rounds + 1):
         round_start_time = time.time()
@@ -67,7 +61,7 @@ def run_fl_simulation(malicious=False):
         num_participating_users.append(participating_users)
         local_weights = []
 
-        malicious_user_id = getMaliciousUser(num_users) if malicious else None
+        
 
         for user_id in range(num_users):
             print(f"User {user_id} is participating in round {round_no}")
@@ -128,7 +122,7 @@ def run_fl_simulation(malicious=False):
 def main():
     results_dir = "results"
     os.makedirs(results_dir, exist_ok=True)
-    clear_results_directory(results_dir)
+    
 
     # Run the normal FL simulation
     print("Running normal FL simulation")
